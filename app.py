@@ -5,7 +5,6 @@ from google.genai import types
 import os
 import json
 import base64
-import threading
 import time
 import math
 import calendar
@@ -18,27 +17,26 @@ from datetime import datetime, timedelta
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.1.1"
+CURRENT_SYSTEM_VERSION = "v2.1.2"
 
 SYSTEM_RELEASE_NOTES = [
+    {
+        "version": "v2.1.2",
+        "date": "2026-10-25",
+        "title": "AI 분석 실행 엔진 안정화 및 즉각 피드백 복구",
+        "details": [
+            "백그라운드 스레드 미동기화 버그 해결 (버튼 클릭 시 즉시 스피너 작동 및 결과 자동 갱신)",
+            "AI 판독 데이터(소재, 중량, 시간, 난이도) 슬라이더 자동 주입 연동",
+            "도면 미등록 및 API 키 예외 처리 강화"
+        ]
+    },
     {
         "version": "v2.1.1",
         "date": "2026-10-25",
         "title": "원가 브레이크다운 표 렌더링 복구 및 날짜창 스타일 통일",
         "details": [
-            "원가 표 공백 들여쓰기 버그 수정(코드 블록 노출 현상 완전 해결)",
-            "납기 요청일(Date Input) 흰색 번짐 제거 및 다크 슬레이트 일원화",
-            "라디오 버튼 선택 인디케이터 코발트 블루 통일"
-        ]
-    },
-    {
-        "version": "v2.1.0",
-        "date": "2026-10-25",
-        "title": "시인성 및 UI 톤앤매너 전면 개편 (Slate & Cobalt 테마)",
-        "details": [
-            "하얗게 번지던 입력 필드와 업로더를 딥 슬레이트 고대비 스타일로 통일",
-            "형광 레드 액션 컬러를 엔터프라이즈 코발트 블루로 전면 교체",
-            "모든 라벨과 보조 텍스트의 명도 대비 상향"
+            "원가 표 공백 들여쓰기 버그 수정",
+            "납기 요청일 다크 슬레이트 스타일 일원화"
         ]
     }
 ]
@@ -157,7 +155,7 @@ def save_tenant_data(company_id, filename, data):
 companies_db = load_json(COMPANIES_META_FILE, DEFAULT_COMPANIES)
 users_db = load_json(USERS_FILE, DEFAULT_USERS)
 
-# admin 슈퍼 관리자 자동 보장 마이그레이션
+# admin 마스터 권한 자동 보장
 migration_needed = False
 if "master_workspace" not in companies_db:
     companies_db["master_workspace"] = {"name": "Costify 본사 마스터", "created_at": "2026-10-25"}
@@ -178,19 +176,16 @@ if migration_needed:
     save_json(USERS_FILE, users_db)
 
 # ==========================================
-# 2. UI 테마 & 고시인성 스타일 시스템 (Slate & Cobalt)
+# 2. UI 테마 & 고시인성 스타일 시스템
 # ==========================================
 st.set_page_config(page_title="Costify | 정밀 절삭가공 견적 & MES", page_icon="⚙️", layout="wide")
 
 st.markdown("""
 <style>
-    /* 전역 배경 */
     .stApp {
         background-color: #080d1a !important;
         color: #f1f5f9 !important;
     }
-
-    /* 카드 패널 */
     .panel-card {
         background: #111a2e !important;
         border: 1px solid #1e2c47 !important;
@@ -209,15 +204,11 @@ st.markdown("""
         border-bottom: 1px solid #1e2c47;
         padding-bottom: 8px;
     }
-
-    /* 텍스트 라벨 시인성 상향 */
     label, .stWidgetLabel p, .stWidgetLabel span {
         color: #cbd5e1 !important;
         font-weight: 600 !important;
         font-size: 12.5px !important;
     }
-
-    /* 텍스트 및 숫자 입력 필드 */
     input, textarea {
         background-color: #090e1c !important;
         color: #f8fafc !important;
@@ -228,8 +219,6 @@ st.markdown("""
         border-color: #0284c7 !important;
         box-shadow: 0 0 0 1px #0284c7 !important;
     }
-
-    /* 날짜 입력창(Date Input) 흰색 번짐 제거 및 다크 스타일링 */
     [data-testid="stDateInput"] div[data-baseweb="input"] {
         background-color: #090e1c !important;
         border: 1px solid #283959 !important;
@@ -242,8 +231,6 @@ st.markdown("""
     [data-testid="stDateInput"] svg {
         fill: #94a3b8 !important;
     }
-
-    /* 셀렉트박스 다크 스타일링 */
     [data-baseweb="select"] > div {
         background-color: #090e1c !important;
         color: #f8fafc !important;
@@ -254,19 +241,11 @@ st.markdown("""
         background-color: #111a2e !important;
         border: 1px solid #1e2c47 !important;
     }
-
-    /* 넘버 인풋 증감(+/-) 버튼 */
     [data-testid="stNumberInput"] button {
         background-color: #18233c !important;
         color: #cbd5e1 !important;
         border-color: #283959 !important;
     }
-    [data-testid="stNumberInput"] button:hover {
-        background-color: #233454 !important;
-        color: #38bdf8 !important;
-    }
-
-    /* 파일 업로더 */
     [data-testid="stFileUploaderDropzone"] {
         background-color: #090e1c !important;
         border: 1px dashed #283959 !important;
@@ -277,14 +256,10 @@ st.markdown("""
         color: #f8fafc !important;
         border: 1px solid #283959 !important;
     }
-
-    /* 라디오 버튼 선택 인디케이터 블루 통일 */
     [data-testid="stRadio"] [aria-checked="true"] div {
         border-color: #0284c7 !important;
         background-color: #0284c7 !important;
     }
-
-    /* 버튼 스타일 (코발트 블루 일원화) */
     button[kind="primary"] {
         background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
         color: #ffffff !important;
@@ -293,10 +268,6 @@ st.markdown("""
         box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3) !important;
         border-radius: 6px !important;
     }
-    button[kind="primary"]:hover {
-        background: linear-gradient(135deg, #0369a1 0%, #075985 100%) !important;
-    }
-
     button[kind="secondary"] {
         background-color: #152037 !important;
         color: #cbd5e1 !important;
@@ -304,13 +275,6 @@ st.markdown("""
         font-weight: 600 !important;
         border-radius: 6px !important;
     }
-    button[kind="secondary"]:hover {
-        background-color: #1e2d4d !important;
-        color: #ffffff !important;
-        border-color: #38bdf8 !important;
-    }
-
-    /* 탭 메뉴 */
     .stTabs [data-baseweb="tab-list"] {
         gap: 12px;
         border-bottom: 1px solid #1e2c47 !important;
@@ -326,8 +290,6 @@ st.markdown("""
         border-bottom: 2px solid #38bdf8 !important;
         background-color: transparent !important;
     }
-
-    /* 메트릭 박스 */
     .metric-container {
         background: #090e1c;
         border: 1px solid #1e2c47;
@@ -337,7 +299,6 @@ st.markdown("""
     }
     .metric-label { color: #94a3b8; font-size: 11.5px; font-weight: 600; }
     .metric-val { color: #f8fafc; font-size: 21px; font-weight: 700; margin-top: 2px; }
-    
     .guardrail-alert {
         background-color: #451a03;
         border: 1px solid #b45309;
@@ -348,7 +309,6 @@ st.markdown("""
         line-height: 1.5;
         margin-bottom: 12px;
     }
-
     .profile-badge {
         display: inline-flex;
         align-items: center;
@@ -360,8 +320,6 @@ st.markdown("""
         font-size: 12px;
         color: #e2e8f0;
     }
-
-    /* 캘린더 그리드 스타일 */
     .cal-header {
         background-color: #090e1c;
         color: #94a3b8;
@@ -431,7 +389,7 @@ if not st.session_state["auth_user"]:
     st.stop()
 
 # ==========================================
-# 3. 테넌트(업체 워크스페이스) 활성화 및 마스터 권한 판정
+# 3. 테넌트(업체 워크스페이스) 활성화
 # ==========================================
 current_user_id = st.session_state.get("auth_user_id", "")
 logged_user = users_db.get(current_user_id, st.session_state["auth_user"])
@@ -550,8 +508,19 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
 # ==========================================
 # 5. 사이드바: 퀵 툴박스
 # ==========================================
-SECURE_API_KEY = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else os.environ.get("GEMINI_API_KEY", "")
-SYSTEM_AI_MODEL = "gemini-3.8-flash"
+def get_secure_api_key():
+    try:
+        if hasattr(st, "secrets"):
+            if "GEMINI_API_KEY" in st.secrets:
+                return st.secrets["GEMINI_API_KEY"]
+            if "gemini_api_key" in st.secrets:
+                return st.secrets["gemini_api_key"]
+    except Exception:
+        pass
+    return os.environ.get("GEMINI_API_KEY", "")
+
+SECURE_API_KEY = get_secure_api_key()
+SYSTEM_AI_MODEL = "gemini-2.5-flash"
 
 with st.sidebar:
     st.markdown(f"### 엔지니어 퀵 툴박스")
@@ -616,7 +585,7 @@ with st.sidebar:
         """, unsafe_allow_html=True)
         
         if st.button("견적에 중량 즉시 반영", use_container_width=True):
-            st.session_state["injected_weight"] = round(calc_weight_kg, 2)
+            st.session_state["pure_weight_val"] = round(calc_weight_kg, 2)
             st.success(f"{calc_weight_kg:.2f} kg이 견적 중량으로 설정되었습니다.")
             st.rerun()
 
@@ -648,8 +617,8 @@ with st.sidebar:
             if found_client:
                 st.caption(f"담당: {found_client['manager']} ({found_client['tel']})")
                 if st.button("견적서에 즉시 반영", use_container_width=True):
-                    st.session_state["injected_client_name"] = found_client["name"]
-                    st.session_state["injected_client_manager"] = found_client["manager"]
+                    st.session_state["client_name_val"] = found_client["name"]
+                    st.session_state["client_mgr_val"] = found_client["manager"]
                     st.success(f"{found_client['name']} 정보가 입력되었습니다.")
                     st.rerun()
 
@@ -666,17 +635,9 @@ with st.sidebar:
                     st.rerun()
 
 # ==========================================
-# 6. 비동기 AI 분석 스레드 관리
+# 6. AI 직접 동기화 분석 함수
 # ==========================================
-if "bg_task" not in st.session_state:
-    st.session_state["bg_task"] = {
-        "status": "idle",
-        "result": None,
-        "error": None,
-        "filename": ""
-    }
-
-def bg_analysis_worker(api_key, model_name, file_bytes, mime_type, filename, task_store):
+def analyze_drawing_sync(api_key, file_bytes, mime_type, filename):
     client = genai.Client(api_key=api_key.strip())
     doc_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
     
@@ -684,10 +645,10 @@ def bg_analysis_worker(api_key, model_name, file_bytes, mime_type, filename, tas
     당신은 한국 20년 경력의 베테랑 절삭가공(MCT/CNC) 공장장입니다.
     업로드된 도면을 분석하여 다음 항목을 반드시 순수한 JSON 형식으로만 추출하세요.
     {
-        "material_type": "재질 (도면 표기 규격)",
-        "pure_weight_kg": 숫자 (완제품 순수 중량 kg),
+        "material_type": "재질 (도면 표기 규격, 예: AL6061, SUS304, SS400, S45C 등)",
+        "pure_weight_kg": 숫자 (완제품 순수 중량 kg, 소수점 둘째자리),
         "cutting_loss_percent": 숫자 (원소재 절삭 로스율 %, 기본 20%),
-        "estimated_machining_hours": 숫자 (순수 절삭 가공 소요 시간 h),
+        "estimated_machining_hours": 숫자 (순수 절삭 가공 소요 시간 h, 소수점 둘째자리),
         "recommended_machine": "추천설비 (3축 머시닝센터(MCT), 5축 머시닝센터(MCT), CNC 복합선반, 범용 선반 / 밀링 중 1개)",
         "difficulty_factor": 숫자 (난이도 계수 1.0~1.8),
         "holes_count": 숫자 (가공 홀 수),
@@ -695,10 +656,10 @@ def bg_analysis_worker(api_key, model_name, file_bytes, mime_type, filename, tas
     }
     """
     
-    models_to_try = [model_name, "gemini-2.5-flash"]
-    last_error_msg = ""
+    models_to_try = ["gemini-2.5-flash", "gemini-3.8-flash"]
+    last_err = ""
     for target_model in models_to_try:
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 response = client.models.generate_content(
                     model=target_model,
@@ -706,20 +667,15 @@ def bg_analysis_worker(api_key, model_name, file_bytes, mime_type, filename, tas
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
                 clean = response.text.strip().replace("```json", "").replace("```", "").strip()
-                task_store["result"] = json.loads(clean)
-                task_store["filename"] = filename
-                task_store["status"] = "completed"
-                return
+                return json.loads(clean), None
             except Exception as e:
-                last_error_msg = str(e)
-                if any(x in last_error_msg for x in ["503", "UNAVAILABLE", "429"]):
-                    time.sleep(2 * (attempt + 1))
+                last_err = str(e)
+                if any(x in last_err for x in ["503", "UNAVAILABLE", "429"]):
+                    time.sleep(2)
                     continue
                 else:
                     break
-
-    task_store["error"] = f"AI 서버 일시 지연: {last_error_msg}"
-    task_store["status"] = "error"
+    return None, last_err
 
 # ==========================================
 # 7. PDF 견적서 생성기
@@ -838,21 +794,30 @@ tabs = st.tabs(["실시간 견적 산출", "공정흐름 관리 (MES)", "납기 
 with tabs[0]:
     left_col, right_col = st.columns([1.1, 0.9], gap="medium")
 
+    # 세션 기본값 관리
+    if "client_name_val" not in st.session_state: st.session_state["client_name_val"] = "(주)한국정밀"
+    if "client_mgr_val" not in st.session_state: st.session_state["client_mgr_val"] = "김철수 부장"
+    if "pure_weight_val" not in st.session_state: st.session_state["pure_weight_val"] = 0.50
+    if "hours_val" not in st.session_state: st.session_state["hours_val"] = 0.50
+    if "difficulty_val" not in st.session_state: st.session_state["difficulty_val"] = 1.00
+    if "loss_rate_val" not in st.session_state: st.session_state["loss_rate_val"] = int(settings.get("default_material_loss", 20))
+    if "memo_val" not in st.session_state: st.session_state["memo_val"] = ""
+    if "active_drawing_name" not in st.session_state: st.session_state["active_drawing_name"] = "도면"
+
     with left_col:
+        # 카드 1: 발주 기본 정보
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">1. 발주 기본 정보</div>', unsafe_allow_html=True)
-            default_c_name = st.session_state.get("injected_client_name", "(주)한국정밀")
-            default_c_mgr = st.session_state.get("injected_client_manager", "김철수 부장")
-            
             c1, c2 = st.columns(2)
             with c1:
-                client_name = st.text_input("고객사(발주처)", value=default_c_name)
+                client_name = st.text_input("고객사(발주처)", value=st.session_state["client_name_val"])
                 order_qty = st.number_input("발주 수량 (EA)", min_value=1, value=10, step=1)
             with c2:
-                client_manager = st.text_input("담당자 성함/직함", value=default_c_mgr)
+                client_manager = st.text_input("담당자 성함/직함", value=st.session_state["client_mgr_val"])
                 due_date = st.date_input("납기 요청일", value=datetime.today() + timedelta(days=12))
             st.markdown('</div>', unsafe_allow_html=True)
 
+        # 카드 2: 도면 파일 및 입력 방식
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">2. 도면 파일 및 입력 방식</div>', unsafe_allow_html=True)
             quote_mode = st.radio("모드 선택", ["AI 비전 도면 자동 판독", "수동 직접 입력"], horizontal=True, label_visibility="collapsed")
@@ -871,70 +836,79 @@ with tabs[0]:
                     file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                     open_in_new_tab_button(uploaded_file.getvalue(), file_mime, label="도면 새 창 열기")
 
-                if start_ai and uploaded_file and SECURE_API_KEY:
-                    if st.session_state["bg_task"]["status"] != "running":
-                        st.session_state["bg_task"]["status"] = "running"
-                        st.session_state["bg_task"]["result"] = None
-                        st.session_state["bg_task"]["error"] = None
-                        t = threading.Thread(
-                            target=bg_analysis_worker,
-                            args=(SECURE_API_KEY, SYSTEM_AI_MODEL, uploaded_file.getvalue(), file_mime, uploaded_file.name, st.session_state["bg_task"])
-                        )
-                        t.daemon = True
-                        t.start()
-                        st.rerun()
-                elif start_ai and not SECURE_API_KEY:
-                    st.error("서버에 등록된 API 키가 없습니다. Streamlit Secrets를 확인하세요.")
+                # AI 분석 실행 트리거 및 직접 동기화 처리
+                if start_ai:
+                    if not uploaded_file:
+                        st.warning("⚠️ 먼저 도면 파일을 업로드해 주세요.")
+                    elif not SECURE_API_KEY:
+                        st.error("❌ Gemini API 키가 감지되지 않았습니다. Streamlit Secrets 설정을 확인하세요.")
+                    else:
+                        with st.spinner("⚡ AI 비전 엔진이 도면 형상, 치수, 툴패스를 정밀 계산 중입니다... (약 3~4초)"):
+                            parsed_res, err = analyze_drawing_sync(SECURE_API_KEY, uploaded_file.getvalue(), file_mime, uploaded_file.name)
+                            if err:
+                                st.error(f"판독 에러: {err}")
+                            elif parsed_res:
+                                st.session_state["active_drawing_name"] = uploaded_file.name
+                                st.session_state["pure_weight_val"] = float(parsed_res.get("pure_weight_kg", 0.50))
+                                st.session_state["hours_val"] = float(parsed_res.get("estimated_machining_hours", 0.50))
+                                st.session_state["difficulty_val"] = float(parsed_res.get("difficulty_factor", 1.00))
+                                st.session_state["loss_rate_val"] = int(parsed_res.get("cutting_loss_percent", 20))
+                                st.session_state["memo_val"] = parsed_res.get("reasoning", "")
+                                st.session_state["ai_suggested_mat"] = parsed_res.get("material_type", "")
+                                st.session_state["ai_suggested_mac"] = parsed_res.get("recommended_machine", "")
+                                st.success("✅ AI 도면 판독 완료! 중량, 시간, 난이도가 아래 검수창에 자동 입력되었습니다.")
+                                st.rerun()
+
             else:
-                st.session_state["manual_filename"] = st.text_input("품목명 / 도면 식별 번호", value="BRACKET-M01")
+                st.session_state["active_drawing_name"] = st.text_input("품목명 / 도면 식별 번호", value="BRACKET-M01")
             st.markdown('</div>', unsafe_allow_html=True)
 
-        active_analysis = st.session_state["bg_task"].get("result")
-        current_fname = st.session_state["bg_task"].get("filename", "") if quote_mode == "AI 비전 도면 자동 판독" else st.session_state.get("manual_filename", "수동품목")
-
-        base_weight = st.session_state.get("injected_weight", float(active_analysis.get("pure_weight_kg", 0.5)) if active_analysis else 0.5)
-        ai_loss_rate = float(active_analysis.get("cutting_loss_percent", settings.get("default_material_loss", 20))) if active_analysis else float(settings.get("default_material_loss", 20))
-        ai_hours = float(active_analysis.get("estimated_machining_hours", 0.5)) if active_analysis else 0.5
-        ai_difficulty_factor = float(active_analysis.get("difficulty_factor", 1.0)) if active_analysis else 1.0
-        ai_reasoning = active_analysis.get("reasoning", "") if active_analysis else ""
-
+        # 카드 3: 사장님 정밀 검수
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">3. 가공 조건 & 엔지니어링 미세 조정</div>', unsafe_allow_html=True)
             k1, k2 = st.columns(2)
+            
+            # 재질 추천 자동 선택
+            mat_keys = list(settings["materials"].keys())
+            def_mat_idx = 0
+            sugg_mat = st.session_state.get("ai_suggested_mat", "").upper()
+            if sugg_mat:
+                for idx, m_k in enumerate(mat_keys):
+                    if any(x in sugg_mat for x in m_k.split()[0].split("/")):
+                        def_mat_idx = idx
+                        break
+
+            # 설비 추천 자동 선택
+            mac_keys = list(settings["machines"].keys())
+            def_mac_idx = 0
+            sugg_mac = st.session_state.get("ai_suggested_mac", "")
+            if sugg_mac:
+                for idx, m_k in enumerate(mac_keys):
+                    if m_k.split()[0] in sugg_mac:
+                        def_mac_idx = idx
+                        break
+
             with k1:
-                mat_keys = list(settings["materials"].keys())
-                def_mat_idx = 0
-                if active_analysis:
-                    for idx, m_k in enumerate(mat_keys):
-                        if any(x in active_analysis.get("material_type", "").upper() for x in m_k.split()[0].split("/")):
-                            def_mat_idx = idx
-                            break
                 sel_material = st.selectbox("소재 재질", mat_keys, index=def_mat_idx)
                 sel_surface = st.selectbox("표면 / 후처리", list(settings["surface_treatments"].keys()))
 
             with k2:
-                mac_keys = list(settings["machines"].keys())
-                def_mac_idx = 0
-                if active_analysis:
-                    for idx, m_k in enumerate(mac_keys):
-                        if m_k.split()[0] in active_analysis.get("recommended_machine", ""):
-                            def_mac_idx = idx
-                            break
                 sel_machine = st.selectbox("적용 가공 설비", mac_keys, index=def_mac_idx)
-                adj_pure_weight = st.number_input("완제품 중량 (kg)", value=float(round(base_weight, 2)), step=0.05, format="%.2f")
+                adj_pure_weight = st.number_input("완제품 중량 (kg)", value=float(st.session_state["pure_weight_val"]), step=0.05, format="%.2f")
 
-            adj_hours = st.slider("개당 가공 소요시간 (h)", min_value=0.1, max_value=15.0, value=float(round(ai_hours, 2)), step=0.05)
+            adj_hours = st.slider("개당 가공 소요시간 (h)", min_value=0.1, max_value=15.0, value=float(st.session_state["hours_val"]), step=0.05)
             
             s1, s2 = st.columns(2)
             with s1:
-                adj_difficulty = st.slider("가공 난이도 계수 (배율)", min_value=1.0, max_value=1.8, value=float(round(ai_difficulty_factor, 2)), step=0.05)
+                adj_difficulty = st.slider("가공 난이도 계수 (배율)", min_value=1.0, max_value=1.8, value=float(st.session_state["difficulty_val"]), step=0.05)
             with s2:
-                adj_loss_rate = st.slider("소재 절삭 로스율 (%)", min_value=10, max_value=40, value=int(ai_loss_rate), step=5)
+                adj_loss_rate = st.slider("소재 절삭 로스율 (%)", min_value=10, max_value=40, value=int(st.session_state["loss_rate_val"]), step=5)
 
-            order_memo = st.text_input("현장 비고 / 특이사항 메모", value=ai_reasoning)
+            order_memo = st.text_input("현장 비고 / 특이사항 메모", value=st.session_state["memo_val"])
             st.markdown('</div>', unsafe_allow_html=True)
 
     with right_col:
+        # 실시간 원가 계산
         raw_material_weight = adj_pure_weight * (1.0 + (adj_loss_rate / 100.0))
         mat_unit_price = settings["materials"][sel_material]
         mat_total_cost = int(raw_material_weight * mat_unit_price * order_qty)
@@ -968,7 +942,7 @@ with tabs[0]:
             "due_date": due_date.strftime("%Y-%m-%d"),
             "client_name": client_name,
             "client_manager": client_manager,
-            "filename": current_fname if current_fname else "도면",
+            "filename": st.session_state["active_drawing_name"],
             "qty": order_qty,
             "material": sel_material,
             "material_unit_price": mat_unit_price,
@@ -1010,7 +984,7 @@ with tabs[0]:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # 들여쓰기 공백 제거한 단일 문자열 HTML 테이블
+            # 고시인성 원가 명세 테이블
             cost_items = [
                 ("1. 원재료비", f"개당 {round(raw_material_weight,2)}kg x {mat_unit_price:,}원 x {order_qty}EA", f"{mat_total_cost:,} 원"),
                 ("2. 순수가공비", f"{adj_hours}h x 시급 {mac_hourly_rate:,}원 x 난이도 {adj_difficulty}", f"{final_machining_cost:,} 원"),
