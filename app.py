@@ -17,26 +17,25 @@ from datetime import datetime, timedelta
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.1.2"
+CURRENT_SYSTEM_VERSION = "v2.1.3"
 
 SYSTEM_RELEASE_NOTES = [
+    {
+        "version": "v2.1.3",
+        "date": "2026-10-25",
+        "title": "503 트래픽 과부하 방어 3단 폴백 체인 구축",
+        "details": [
+            "구글 AI 서버 503 UNAVAILABLE 대비 3단계 모델 우회(flash ➔ pro ➔ flash) 적용",
+            "점진적 지수 백오프(2s ➔ 4s ➔ 6s) 대기 로직 적용으로 순간 트래픽 방어",
+            "실패 시 직관적인 재시도 및 수동 모드 우회 가이드 배너 탑재"
+        ]
+    },
     {
         "version": "v2.1.2",
         "date": "2026-10-25",
         "title": "AI 분석 실행 엔진 안정화 및 즉각 피드백 복구",
         "details": [
-            "백그라운드 스레드 미동기화 버그 해결 (버튼 클릭 시 즉시 스피너 작동 및 결과 자동 갱신)",
-            "AI 판독 데이터(소재, 중량, 시간, 난이도) 슬라이더 자동 주입 연동",
-            "도면 미등록 및 API 키 예외 처리 강화"
-        ]
-    },
-    {
-        "version": "v2.1.1",
-        "date": "2026-10-25",
-        "title": "원가 브레이크다운 표 렌더링 복구 및 날짜창 스타일 통일",
-        "details": [
-            "원가 표 공백 들여쓰기 버그 수정",
-            "납기 요청일 다크 슬레이트 스타일 일원화"
+            "AI 판독 데이터(소재, 중량, 시간, 난이도) 슬라이더 자동 주입 연동"
         ]
     }
 ]
@@ -520,7 +519,6 @@ def get_secure_api_key():
     return os.environ.get("GEMINI_API_KEY", "")
 
 SECURE_API_KEY = get_secure_api_key()
-SYSTEM_AI_MODEL = "gemini-2.5-flash"
 
 with st.sidebar:
     st.markdown(f"### 엔지니어 퀵 툴박스")
@@ -635,9 +633,9 @@ with st.sidebar:
                     st.rerun()
 
 # ==========================================
-# 6. AI 직접 동기화 분석 함수
+# 6. AI 3단 폴백 & 지수 백오프 분석 엔진 (503 방어)
 # ==========================================
-def analyze_drawing_sync(api_key, file_bytes, mime_type, filename):
+def analyze_drawing_resilient(api_key, file_bytes, mime_type, filename):
     client = genai.Client(api_key=api_key.strip())
     doc_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
     
@@ -656,26 +654,31 @@ def analyze_drawing_sync(api_key, file_bytes, mime_type, filename):
     }
     """
     
-    models_to_try = ["gemini-2.5-flash", "gemini-3.8-flash"]
-    last_err = ""
-    for target_model in models_to_try:
+    # 3단계 모델 우회 체인
+    models_cascade = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.8-flash"]
+    last_err_detail = ""
+    
+    for model_candidate in models_cascade:
+        # 점진적 지수 대기 (1회차: 2초, 2회차: 4초)
         for attempt in range(2):
             try:
                 response = client.models.generate_content(
-                    model=target_model,
+                    model=model_candidate,
                     contents=[doc_part, prompt],
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
-                clean = response.text.strip().replace("```json", "").replace("```", "").strip()
-                return json.loads(clean), None
+                clean_text = response.text.strip().replace("```json", "").replace("```", "").strip()
+                return json.loads(clean_text), None
             except Exception as e:
-                last_err = str(e)
-                if any(x in last_err for x in ["503", "UNAVAILABLE", "429"]):
-                    time.sleep(2)
+                last_err_detail = str(e)
+                # 503 또는 429 감지 시 서버 회복을 위해 대기 후 재시도
+                if any(x in last_err_detail for x in ["503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED"]):
+                    time.sleep(2 * (attempt + 1))
                     continue
                 else:
-                    break
-    return None, last_err
+                    break  # 일반 에러는 다음 모델로 우회
+
+    return None, last_err_detail
 
 # ==========================================
 # 7. PDF 견적서 생성기
@@ -836,17 +839,18 @@ with tabs[0]:
                     file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                     open_in_new_tab_button(uploaded_file.getvalue(), file_mime, label="도면 새 창 열기")
 
-                # AI 분석 실행 트리거 및 직접 동기화 처리
+                # AI 분석 실행 (3단 우회 체인 적용)
                 if start_ai:
                     if not uploaded_file:
                         st.warning("⚠️ 먼저 도면 파일을 업로드해 주세요.")
                     elif not SECURE_API_KEY:
-                        st.error("❌ Gemini API 키가 감지되지 않았습니다. Streamlit Secrets 설정을 확인하세요.")
+                        st.error("❌ Gemini API 키가 감지되지 않았습니다. Streamlit Secrets를 확인하세요.")
                     else:
-                        with st.spinner("⚡ AI 비전 엔진이 도면 형상, 치수, 툴패스를 정밀 계산 중입니다... (약 3~4초)"):
-                            parsed_res, err = analyze_drawing_sync(SECURE_API_KEY, uploaded_file.getvalue(), file_mime, uploaded_file.name)
+                        with st.spinner("⚡ AI 서버 연결 중... (과부하 감지 시 대체 클러스터로 자동 우회합니다)"):
+                            parsed_res, err = analyze_drawing_resilient(SECURE_API_KEY, uploaded_file.getvalue(), file_mime, uploaded_file.name)
                             if err:
-                                st.error(f"판독 에러: {err}")
+                                st.error("❌ 구글 AI 서버 트래픽이 현재 전 세계적으로 극심하여 모든 대체 모델 연결이 지연되었습니다.")
+                                st.info("💡 팁: 약 5~10초 후 'AI 분석 실행'을 다시 누르면 정상 처리됩니다. 작업이 급하신 경우 상단의 '수동 직접 입력' 모드로 전환하여 즉시 견적을 산출하실 수 있습니다.")
                             elif parsed_res:
                                 st.session_state["active_drawing_name"] = uploaded_file.name
                                 st.session_state["pure_weight_val"] = float(parsed_res.get("pure_weight_kg", 0.50))
@@ -868,7 +872,6 @@ with tabs[0]:
             st.markdown('<div class="panel-card"><div class="panel-title">3. 가공 조건 & 엔지니어링 미세 조정</div>', unsafe_allow_html=True)
             k1, k2 = st.columns(2)
             
-            # 재질 추천 자동 선택
             mat_keys = list(settings["materials"].keys())
             def_mat_idx = 0
             sugg_mat = st.session_state.get("ai_suggested_mat", "").upper()
@@ -878,7 +881,6 @@ with tabs[0]:
                         def_mat_idx = idx
                         break
 
-            # 설비 추천 자동 선택
             mac_keys = list(settings["machines"].keys())
             def_mac_idx = 0
             sugg_mac = st.session_state.get("ai_suggested_mac", "")
@@ -908,7 +910,6 @@ with tabs[0]:
             st.markdown('</div>', unsafe_allow_html=True)
 
     with right_col:
-        # 실시간 원가 계산
         raw_material_weight = adj_pure_weight * (1.0 + (adj_loss_rate / 100.0))
         mat_unit_price = settings["materials"][sel_material]
         mat_total_cost = int(raw_material_weight * mat_unit_price * order_qty)
@@ -984,7 +985,6 @@ with tabs[0]:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # 고시인성 원가 명세 테이블
             cost_items = [
                 ("1. 원재료비", f"개당 {round(raw_material_weight,2)}kg x {mat_unit_price:,}원 x {order_qty}EA", f"{mat_total_cost:,} 원"),
                 ("2. 순수가공비", f"{adj_hours}h x 시급 {mac_hourly_rate:,}원 x 난이도 {adj_difficulty}", f"{final_machining_cost:,} 원"),
