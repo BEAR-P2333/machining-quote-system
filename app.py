@@ -18,26 +18,26 @@ from datetime import datetime, timedelta
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.0.1"
+CURRENT_SYSTEM_VERSION = "v2.1.0"
 
 SYSTEM_RELEASE_NOTES = [
+    {
+        "version": "v2.1.0",
+        "date": "2026-10-25",
+        "title": "시인성 및 UI 톤앤매너 전면 개편 (Slate & Cobalt 테마)",
+        "details": [
+            "하얗게 번지던 입력 필드와 업로더를 딥 슬레이트 고대비 스타일로 통일",
+            "눈 아픈 형광 레드 액션 컬러를 엔터프라이즈 코발트 블루로 전면 교체",
+            "우측 원가 브레이크다운 표의 배경 분절 문제 해결 및 가독성 극대화",
+            "모든 라벨과 보조 텍스트의 명도 대비를 상향하여 주야간 시인성 확보"
+        ]
+    },
     {
         "version": "v2.0.1",
         "date": "2026-10-25",
         "title": "마스터 권한 자동 승격 및 멀티테넌트 UI 복구",
         "details": [
-            "기존 구버전 계정 파일 자동 마이그레이션(admin 계정 super_admin 강제 보장)",
-            "상단 워크스페이스 스위처 및 고객사 생성 패널 렌더링 누락 문제 원천 해결"
-        ]
-    },
-    {
-        "version": "v2.0.0",
-        "date": "2026-10-25",
-        "title": "멀티테넌트(업체별 독립 워크스페이스) 아키텍처 구축",
-        "details": [
-            "업체별 물리 데이터 격리(/companies/{company_id}/)로 상호 데이터 유출 원천 차단",
-            "총괄 관리자(Super Admin) 전용 워크스페이스 실시간 스위칭 뷰어 탑재",
-            "신규 가공업체 계정 및 전용 워크스페이스 원클릭 프로비저닝 기능 탑재"
+            "admin 계정 슈퍼 관리자 권한 강제 보장 및 업체 전환 스위처 복구"
         ]
     }
 ]
@@ -156,17 +156,12 @@ def save_tenant_data(company_id, filename, data):
 companies_db = load_json(COMPANIES_META_FILE, DEFAULT_COMPANIES)
 users_db = load_json(USERS_FILE, DEFAULT_USERS)
 
-# ==========================================
-# ★ 중요: 구버전 데이터 자동 마이그레이션 (admin 권한 보장)
-# ==========================================
+# admin 슈퍼 관리자 자동 보장 마이그레이션
 migration_needed = False
-
-# 1. master_workspace 등록 확인
 if "master_workspace" not in companies_db:
     companies_db["master_workspace"] = {"name": "Costify 본사 마스터", "created_at": "2026-10-25"}
     migration_needed = True
 
-# 2. admin 계정 권한을 super_admin으로 강제 승격
 if "admin" in users_db:
     if users_db["admin"].get("role") != "super_admin" or users_db["admin"].get("company_id") != "master_workspace":
         users_db["admin"]["role"] = "super_admin"
@@ -182,41 +177,149 @@ if migration_needed:
     save_json(USERS_FILE, users_db)
 
 # ==========================================
-# 2. UI 테마 & 로그인 세션 관리
+# 2. UI 테마 & 고시인성 스타일 시스템 (Slate & Cobalt)
 # ==========================================
-st.set_page_config(page_title="Costify | 멀티테넌트 가공 견적 & MES", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="Costify | 정밀 절삭가공 견적 & MES", page_icon="⚙️", layout="wide")
 
 st.markdown("""
 <style>
-    .stApp { background-color: #0b0f19; }
-    
+    /* 1. 전역 배경 및 폰트 기본 명도 */
+    .stApp {
+        background-color: #080d1a !important;
+        color: #f1f5f9 !important;
+    }
+
+    /* 2. 카드 패널 (은은한 입체감과 정돈된 테두리) */
     .panel-card {
-        background: #111827;
-        border: 1px solid #1f2937;
+        background: #111a2e !important;
+        border: 1px solid #1e2c47 !important;
         border-radius: 8px;
-        padding: 16px;
+        padding: 16px 18px;
         margin-bottom: 14px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     }
     .panel-title {
-        color: #94a3b8;
+        color: #38bdf8 !important;
         font-size: 13px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 12px;
-        border-bottom: 1px solid #1f2937;
-        padding-bottom: 6px;
+        letter-spacing: 0.6px;
+        margin-bottom: 14px;
+        border-bottom: 1px solid #1e2c47;
+        padding-bottom: 8px;
     }
 
+    /* 3. 텍스트 라벨 시인성 대폭 상향 (배경에 묻히는 문제 해결) */
+    label, .stWidgetLabel p, .stWidgetLabel span {
+        color: #cbd5e1 !important;
+        font-weight: 600 !important;
+        font-size: 12.5px !important;
+    }
+
+    /* 4. 입력 위젯(Input, Number, Selectbox) 다크 슬레이트 통일 (흰색 번짐 제거) */
+    input, textarea {
+        background-color: #090e1c !important;
+        color: #f8fafc !important;
+        border: 1px solid #283959 !important;
+        border-radius: 6px !important;
+    }
+    input:focus, textarea:focus {
+        border-color: #0284c7 !important;
+        box-shadow: 0 0 0 1px #0284c7 !important;
+    }
+
+    /* 셀렉트박스 다크 스타일링 */
+    [data-baseweb="select"] > div {
+        background-color: #090e1c !important;
+        color: #f8fafc !important;
+        border: 1px solid #283959 !important;
+        border-radius: 6px !important;
+    }
+    [data-baseweb="popover"], [data-baseweb="menu"] {
+        background-color: #111a2e !important;
+        border: 1px solid #1e2c47 !important;
+    }
+
+    /* 넘버 인풋의 증감(+/-) 버튼 */
+    [data-testid="stNumberInput"] button {
+        background-color: #18233c !important;
+        color: #cbd5e1 !important;
+        border-color: #283959 !important;
+    }
+    [data-testid="stNumberInput"] button:hover {
+        background-color: #233454 !important;
+        color: #38bdf8 !important;
+    }
+
+    /* 파일 업로더 흰색 번짐 제거 */
+    [data-testid="stFileUploaderDropzone"] {
+        background-color: #090e1c !important;
+        border: 1px dashed #283959 !important;
+        border-radius: 8px !important;
+    }
+    [data-testid="stFileUploaderDropzone"] button {
+        background-color: #18233c !important;
+        color: #f8fafc !important;
+        border: 1px solid #283959 !important;
+    }
+
+    /* 5. 버튼 컬러 전면 개편 (형광 레드 제거 -> 신뢰감 있는 코발트 블루) */
+    button[kind="primary"] {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+        color: #ffffff !important;
+        border: none !important;
+        font-weight: 700 !important;
+        box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3) !important;
+        border-radius: 6px !important;
+    }
+    button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #0369a1 0%, #075985 100%) !important;
+    }
+
+    button[kind="secondary"] {
+        background-color: #152037 !important;
+        color: #cbd5e1 !important;
+        border: 1px solid #283959 !important;
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+    }
+    button[kind="secondary"]:hover {
+        background-color: #1e2d4d !important;
+        color: #ffffff !important;
+        border-color: #38bdf8 !important;
+    }
+
+    /* 6. 탭 메뉴 (붉은색 제거 -> 모던 블루 언더라인) */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 12px;
+        border-bottom: 1px solid #1e2c47 !important;
+        padding-bottom: 2px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        color: #94a3b8 !important;
+        font-weight: 600 !important;
+        padding: 8px 16px !important;
+        border-radius: 4px 4px 0 0;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: #f8fafc !important;
+    }
+    .stTabs [aria-selected="true"] {
+        color: #38bdf8 !important;
+        border-bottom: 2px solid #38bdf8 !important;
+        background-color: transparent !important;
+    }
+
+    /* 7. 메트릭 컨테이너 */
     .metric-container {
-        background: #0f172a;
-        border: 1px solid #1e293b;
+        background: #090e1c;
+        border: 1px solid #1e2c47;
         border-radius: 8px;
-        padding: 14px;
+        padding: 12px 14px;
         margin-bottom: 8px;
     }
-    .metric-label { color: #64748b; font-size: 12px; font-weight: 600; }
-    .metric-val { color: #f8fafc; font-size: 22px; font-weight: 700; margin-top: 3px; }
+    .metric-label { color: #94a3b8; font-size: 11.5px; font-weight: 600; }
+    .metric-val { color: #f8fafc; font-size: 21px; font-weight: 700; margin-top: 2px; }
     
     .guardrail-alert {
         background-color: #451a03;
@@ -233,31 +336,32 @@ st.markdown("""
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        background: #1e293b;
-        border: 1px solid #334155;
+        background: #152037;
+        border: 1px solid #283959;
         border-radius: 6px;
         padding: 4px 10px;
         font-size: 12px;
         color: #e2e8f0;
     }
 
+    /* 8. 캘린더 그리드 스타일 */
     .cal-header {
-        background-color: #0f172a;
-        color: #64748b;
+        background-color: #090e1c;
+        color: #94a3b8;
         padding: 8px;
         text-align: center;
         font-weight: 700;
-        border: 1px solid #1f2937;
+        border: 1px solid #1e2c47;
         font-size: 12px;
     }
     .cal-day-cell {
         min-height: 95px;
-        background-color: #111827;
-        border: 1px solid #1f2937;
+        background-color: #111a2e;
+        border: 1px solid #1e2c47;
         padding: 6px;
         vertical-align: top;
     }
-    .cal-day-cell.other-month { background-color: #0b0f19; opacity: 0.35; }
+    .cal-day-cell.other-month { background-color: #080d1a; opacity: 0.35; }
     .cal-day-cell.today { border: 2px solid #0284c7 !important; }
     .cal-badge {
         font-size: 10px;
@@ -316,7 +420,6 @@ current_user_id = st.session_state.get("auth_user_id", "")
 logged_user = users_db.get(current_user_id, st.session_state["auth_user"])
 st.session_state["auth_user"] = logged_user
 
-# ★ admin 계정이면 무조건 슈퍼 관리자 권한 보장
 is_super_admin = (
     current_user_id == "admin" or
     logged_user.get("role") in ["super_admin", "admin"]
@@ -398,10 +501,10 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     js_code = f"""
     <div style="margin: 4px 0;">
         <button onclick="openBlob()" style="
-            background-color: #1e293b;
+            background-color: #152037;
             color: #38bdf8;
-            border: 1px solid #0284c7;
-            padding: 7px 14px;
+            border: 1px solid #283959;
+            padding: 8px 14px;
             border-radius: 6px;
             font-size: 12px;
             font-weight: 600;
@@ -425,7 +528,7 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     }}
     </script>
     """
-    components.html(js_code, height=42)
+    components.html(js_code, height=44)
 
 # ==========================================
 # 5. 사이드바: 퀵 툴박스
@@ -458,7 +561,7 @@ with st.sidebar:
         else:
             for diff, tag, uo in urgent_orders[:5]:
                 st.markdown(f"""
-                <div style="background:#1e293b; border-left:3px solid #ef4444; padding:6px 8px; border-radius:4px; margin-bottom:6px; font-size:11px;">
+                <div style="background:#152037; border-left:3px solid #ef4444; padding:6px 8px; border-radius:4px; margin-bottom:6px; font-size:11px;">
                     <b style="color:#f87171;">{tag}</b> | {uo.get('client_name')[:5]}<br>
                     {uo.get('filename')[:12]} ({uo.get('qty')}EA) | <span style="color:#94a3b8;">{uo.get('status')}</span>
                 </div>
@@ -489,7 +592,7 @@ with st.sidebar:
             calc_weight_kg = max(0.0, (vol_cm3 * dens_val) / 1000.0)
 
         st.markdown(f"""
-        <div style="background:#0f172a; padding:8px; border-radius:6px; border:1px solid #1e293b; text-align:center; margin:8px 0;">
+        <div style="background:#090e1c; padding:8px; border-radius:6px; border:1px solid #1e2c47; text-align:center; margin:8px 0;">
             <div style="font-size:11px; color:#94a3b8;">계산된 순수 중량</div>
             <div style="font-size:18px; font-weight:700; color:#38bdf8;">{calc_weight_kg:.3f} kg</div>
         </div>
@@ -512,7 +615,7 @@ with st.sidebar:
         calc_time_sec = int((cut_len / calc_feed) * 60) if calc_feed > 0 else 0
 
         st.markdown(f"""
-        <div style="background:#0f172a; padding:8px; border-radius:6px; border:1px solid #1e293b; font-size:12px; margin-top:6px;">
+        <div style="background:#090e1c; padding:8px; border-radius:6px; border:1px solid #1e2c47; font-size:12px; margin-top:6px;">
             주축 회전수: <b style="color:#f8fafc;">{calc_rpm:,} RPM</b><br>
             이송속도: <b style="color:#f8fafc;">{calc_feed:,} mm/min</b><br>
             1회 가공소요: <b style="color:#38bdf8;">{calc_time_sec // 60}분 {calc_time_sec % 60}초</b>
@@ -890,14 +993,36 @@ with tabs[0]:
                 </div>
                 """, unsafe_allow_html=True)
 
-            cost_table = pd.DataFrame([
-                {"원가 항목": "1. 원재료비", "산출 근거": f"개당 {round(raw_material_weight,2)}kg x {mat_unit_price:,}원 x {order_qty}EA", "금액(원)": f"{mat_total_cost:,} 원"},
-                {"원가 항목": "2. 순수가공비", "산출 근거": f"{adj_hours}h x 시급 {mac_hourly_rate:,}원 x 난이도 {adj_difficulty}", "금액(원)": f"{final_machining_cost:,} 원"},
-                {"원가 항목": "3. 초도세팅비", "산출 근거": "기계 원점 및 툴 세팅 공임 (1회)", "금액(원)": f"{setup_fee:,} 원"},
-                {"원가 항목": "4. 표면/후처리비", "산출 근거": f"{sel_surface} x {order_qty}EA", "금액(원)": f"{surf_total_cost:,} 원"},
-                {"원가 항목": "5. 관리비/마진", "산출 근거": f"제조원가 대비 {margin_pct}%", "금액(원)": f"{margin_amount:,} 원"}
-            ])
-            st.dataframe(cost_table, hide_index=True, use_container_width=True)
+            # 고시인성 다크 네이티브 원가 명세 테이블 (흰색 판 번짐 해결)
+            cost_items = [
+                ("1. 원재료비", f"개당 {round(raw_material_weight,2)}kg x {mat_unit_price:,}원 x {order_qty}EA", f"{mat_total_cost:,} 원"),
+                ("2. 순수가공비", f"{adj_hours}h x 시급 {mac_hourly_rate:,}원 x 난이도 {adj_difficulty}", f"{final_machining_cost:,} 원"),
+                ("3. 초도세팅비", "기계 원점 및 툴 세팅 공임 (1회)", f"{setup_fee:,} 원"),
+                ("4. 표면/후처리비", f"{sel_surface} x {order_qty}EA", f"{surf_total_cost:,} 원"),
+                ("5. 관리비/마진", f"제조원가 대비 {margin_pct}%", f"{margin_amount:,} 원")
+            ]
+
+            html_table = """
+            <table style="width:100%; border-collapse:collapse; margin-bottom:14px; font-size:12.5px;">
+                <thead>
+                    <tr style="border-bottom: 1px solid #1e2c47; color: #94a3b8; text-align: left;">
+                        <th style="padding: 7px 4px;">원가 항목</th>
+                        <th style="padding: 7px 4px;">산출 근거</th>
+                        <th style="padding: 7px 4px; text-align: right;">금액</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+            for name, formula, price in cost_items:
+                html_table += f"""
+                    <tr style="border-bottom: 1px solid #152037; color: #f8fafc;">
+                        <td style="padding: 8px 4px; font-weight: 600;">{name}</td>
+                        <td style="padding: 8px 4px; color: #cbd5e1;">{formula}</td>
+                        <td style="padding: 8px 4px; text-align: right; font-weight: 700; color: #38bdf8;">{price}</td>
+                    </tr>
+                """
+            html_table += "</tbody></table>"
+            st.markdown(html_table, unsafe_allow_html=True)
 
             b1, b2 = st.columns(2)
             with b1:
@@ -952,9 +1077,9 @@ with tabs[1]:
                 
                 step_html = "<div style='display: flex; gap: 4px; margin-bottom: 12px; overflow-x: auto;'>"
                 for s_i, s_name in enumerate(PROCESS_STAGES):
-                    bg = STAGE_CONFIG[s_name]['color'] if s_i <= step_idx else "#1e293b"
-                    opac = "1.0" if s_i == step_idx else ("0.5" if s_i < step_idx else "0.2")
-                    border = "1px solid #38bdf8" if s_i == step_idx else "1px solid #334155"
+                    bg = STAGE_CONFIG[s_name]['color'] if s_i <= step_idx else "#152037"
+                    opac = "1.0" if s_i == step_idx else ("0.55" if s_i < step_idx else "0.25")
+                    border = "1px solid #38bdf8" if s_i == step_idx else "1px solid #283959"
                     step_html += f"<div style='flex:1; min-width:65px; background-color:{bg}; opacity:{opac}; border:{border}; padding:6px 2px; text-align:center; border-radius:4px; font-size:11px; font-weight:700; color:#fff;'>{STAGE_CONFIG[s_name]['name']}</div>"
                 step_html += "</div>"
                 st.markdown(step_html, unsafe_allow_html=True)
@@ -1098,7 +1223,6 @@ with tabs[3]:
 # TAB 5: 시스템 설정 & 테넌트 관리
 # ------------------------------------------
 with tabs[4]:
-    # 1. 슈퍼 관리자 전용: 고객사 워크스페이스 신규 발급 & 관리
     if is_super_admin:
         st.markdown('<div class="panel-card"><div class="panel-title">고객사 워크스페이스 신규 발급 & 관리 (총괄 마스터 전용)</div>', unsafe_allow_html=True)
         nc1, nc2, nc3, nc4 = st.columns(4)
@@ -1169,7 +1293,6 @@ with tabs[4]:
             st.divider()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. 현재 워크스페이스의 공급자 정보 및 기준 단가표
     st.markdown(f'<div class="panel-card"><div class="panel-title">[{active_c_name}] 공급사 정보 및 기준 단가 설정</div>', unsafe_allow_html=True)
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
@@ -1212,7 +1335,6 @@ with tabs[4]:
         st.success(f"[{active_c_name}] 전용 단가표 및 공급사 정보가 저장되었습니다.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. 현재 워크스페이스 전용 데이터 백업 / 복원
     st.markdown(f'<div class="panel-card"><div class="panel-title">[{active_c_name}] 전용 데이터 백업 & 복원</div>', unsafe_allow_html=True)
     bk1, bk2 = st.columns(2)
     with bk1:
