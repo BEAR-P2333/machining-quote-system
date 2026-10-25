@@ -18,9 +18,18 @@ from datetime import datetime, timedelta
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.0.0"
+CURRENT_SYSTEM_VERSION = "v2.0.1"
 
 SYSTEM_RELEASE_NOTES = [
+    {
+        "version": "v2.0.1",
+        "date": "2026-10-25",
+        "title": "마스터 권한 자동 승격 및 멀티테넌트 UI 복구",
+        "details": [
+            "기존 구버전 계정 파일 자동 마이그레이션(admin 계정 super_admin 강제 보장)",
+            "상단 워크스페이스 스위처 및 고객사 생성 패널 렌더링 누락 문제 원천 해결"
+        ]
+    },
     {
         "version": "v2.0.0",
         "date": "2026-10-25",
@@ -28,17 +37,7 @@ SYSTEM_RELEASE_NOTES = [
         "details": [
             "업체별 물리 데이터 격리(/companies/{company_id}/)로 상호 데이터 유출 원천 차단",
             "총괄 관리자(Super Admin) 전용 워크스페이스 실시간 스위칭 뷰어 탑재",
-            "신규 가공업체 계정 및 전용 워크스페이스 원클릭 프로비저닝 기능 탑재",
-            "업체별 고유 공급사 정보, 단가표, 발주 이력, 거래처 주소록 분리 보관"
-        ]
-    },
-    {
-        "version": "v1.5.0",
-        "date": "2026-10-25",
-        "title": "사이드바 엔지니어 퀵 툴박스 탑재 및 보안 격리",
-        "details": [
-            "API 키 UI 제거 및 백엔드 Secrets 완전 격리",
-            "소재 중량 계산기, 절삭 조건(RPM/Feed) 계산기, 긴급 납기 모니터링 탑재"
+            "신규 가공업체 계정 및 전용 워크스페이스 원클릭 프로비저닝 기능 탑재"
         ]
     }
 ]
@@ -56,7 +55,7 @@ AUTH_SECRET_KEY = "costify_multi_tenant_secret_2026"
 
 DEFAULT_SETTINGS = {
     "company_info": {
-        "company_name": "Costify 표준 공장",
+        "company_name": "Costify 본사 마스터 공장",
         "biz_num": "123-45-67890",
         "ceo_name": "홍길동",
         "tel": "031-123-4567",
@@ -141,7 +140,6 @@ def save_json(path, data):
 def generate_session_token(uid):
     return hashlib.sha256(f"{uid}_{AUTH_SECRET_KEY}".encode()).hexdigest()[:16]
 
-# 테넌트 전용 데이터 입출력 헬퍼
 def get_tenant_dir(company_id):
     p = os.path.join(COMPANIES_BASE_DIR, company_id)
     os.makedirs(p, exist_ok=True)
@@ -157,6 +155,31 @@ def save_tenant_data(company_id, filename, data):
 
 companies_db = load_json(COMPANIES_META_FILE, DEFAULT_COMPANIES)
 users_db = load_json(USERS_FILE, DEFAULT_USERS)
+
+# ==========================================
+# ★ 중요: 구버전 데이터 자동 마이그레이션 (admin 권한 보장)
+# ==========================================
+migration_needed = False
+
+# 1. master_workspace 등록 확인
+if "master_workspace" not in companies_db:
+    companies_db["master_workspace"] = {"name": "Costify 본사 마스터", "created_at": "2026-10-25"}
+    migration_needed = True
+
+# 2. admin 계정 권한을 super_admin으로 강제 승격
+if "admin" in users_db:
+    if users_db["admin"].get("role") != "super_admin" or users_db["admin"].get("company_id") != "master_workspace":
+        users_db["admin"]["role"] = "super_admin"
+        users_db["admin"]["company_id"] = "master_workspace"
+        users_db["admin"]["name"] = "시스템 총괄마스터"
+        migration_needed = True
+else:
+    users_db["admin"] = DEFAULT_USERS["admin"]
+    migration_needed = True
+
+if migration_needed:
+    save_json(COMPANIES_META_FILE, companies_db)
+    save_json(USERS_FILE, users_db)
 
 # ==========================================
 # 2. UI 테마 & 로그인 세션 관리
@@ -287,16 +310,21 @@ if not st.session_state["auth_user"]:
     st.stop()
 
 # ==========================================
-# 3. 테넌트(업체 워크스페이스) 활성화 및 전환
+# 3. 테넌트(업체 워크스페이스) 활성화 및 마스터 권한 판정
 # ==========================================
-logged_user = st.session_state["auth_user"]
-is_super_admin = (logged_user.get("role") == "super_admin")
+current_user_id = st.session_state.get("auth_user_id", "")
+logged_user = users_db.get(current_user_id, st.session_state["auth_user"])
+st.session_state["auth_user"] = logged_user
 
-# 총괄 관리자는 원하는 회사를 선택하여 이동 가능, 일반 사용자는 자기 회사에 고정
+# ★ admin 계정이면 무조건 슈퍼 관리자 권한 보장
+is_super_admin = (
+    current_user_id == "admin" or
+    logged_user.get("role") in ["super_admin", "admin"]
+)
+
 if "active_company_id" not in st.session_state or not is_super_admin:
     st.session_state["active_company_id"] = logged_user.get("company_id", "master_workspace")
 
-# 활성 워크스페이스의 데이터 세트 로드
 active_cid = st.session_state["active_company_id"]
 active_c_name = companies_db.get(active_cid, {}).get("name", "지정 워크스페이스")
 
@@ -310,18 +338,16 @@ clients_db = load_tenant_data(active_cid, "clients_directory.json", [
 # ==========================================
 # 4. 상단 헤더, 마스터 스위처 & 릴리즈 노트
 # ==========================================
-current_user_id = st.session_state.get("auth_user_id")
 user_last_seen = users_db.get(current_user_id, {}).get("last_seen_version", "")
 has_new_update = (user_last_seen != CURRENT_SYSTEM_VERSION)
 
-head_left, head_right = st.columns([2.6, 2.4])
+head_left, head_right = st.columns([2.2, 2.8])
 with head_left:
-    st.markdown(f"### COSTIFY <span style='font-size:13px; font-weight:400; color:#38bdf8;'>[{active_c_name}]</span>", unsafe_allow_html=True)
+    st.markdown(f"### COSTIFY <span style='font-size:13px; font-weight:600; color:#38bdf8;'>[{active_c_name}]</span>", unsafe_allow_html=True)
 
 with head_right:
-    # 슈퍼 관리자용 워크스페이스 스위처
     if is_super_admin:
-        sw_col, rel_col, prof_col, btn_col = st.columns([1.8, 1.1, 1.4, 0.9])
+        sw_col, rel_col, prof_col, btn_col = st.columns([1.8, 0.9, 1.4, 0.9])
         with sw_col:
             c_options = list(companies_db.keys())
             c_idx = c_options.index(active_cid) if active_cid in c_options else 0
@@ -329,14 +355,14 @@ with head_right:
                 "업체 전환",
                 c_options,
                 index=c_idx,
-                format_func=lambda x: f"🏢 {companies_db[x]['name']}",
+                format_func=lambda x: f"🏢 {companies_db.get(x, {}).get('name', x)}",
                 label_visibility="collapsed"
             )
             if new_selected_cid != active_cid:
                 st.session_state["active_company_id"] = new_selected_cid
                 st.rerun()
     else:
-        rel_col, prof_col, btn_col = st.columns([1.4, 2.2, 1.1])
+        rel_col, prof_col, btn_col = st.columns([1.2, 2.2, 1.0])
 
     with rel_col:
         label_text = f"업데이트 ●" if has_new_update else "업데이트"
@@ -402,7 +428,7 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     components.html(js_code, height=42)
 
 # ==========================================
-# 5. 사이드바: 활성 워크스페이스 전용 퀵 툴박스
+# 5. 사이드바: 퀵 툴박스
 # ==========================================
 SECURE_API_KEY = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else os.environ.get("GEMINI_API_KEY", "")
 SYSTEM_AI_MODEL = "gemini-3.8-flash"
@@ -411,7 +437,6 @@ with st.sidebar:
     st.markdown(f"### 엔지니어 퀵 툴박스")
     st.caption(f"접속 공간: **{active_c_name}**")
     
-    # 툴 1: 긴급 납기 모니터링
     with st.expander("🚨 긴급 납기 / 지연 건", expanded=True):
         today = datetime.today().date()
         urgent_orders = []
@@ -439,7 +464,6 @@ with st.sidebar:
                 </div>
                 """, unsafe_allow_html=True)
 
-    # 툴 2: 소재 중량 & 비중 계산기
     with st.expander("⚖️ 소재 중량 & 비중 계산기"):
         shape_type = st.selectbox("형상 선택", ["사각 판재 (Plate)", "원형 환봉 (Round Bar)", "원형 파이프 (Pipe)"], index=0)
         selected_mat_dens = st.selectbox("소재 종류 (비중)", list(DENSITY_TABLE.keys()), index=0)
@@ -476,7 +500,6 @@ with st.sidebar:
             st.success(f"{calc_weight_kg:.2f} kg이 견적 중량으로 설정되었습니다.")
             st.rerun()
 
-    # 툴 3: 절삭 조건 계산기
     with st.expander("⚙️ 절삭 조건 (RPM/피드) 계산기"):
         tool_d = st.number_input("공구 직경 D (mm)", value=10.0, step=1.0)
         cut_vc = st.number_input("절삭속도 Vc (m/min)", value=120.0, step=10.0)
@@ -496,7 +519,6 @@ with st.sidebar:
         </div>
         """, unsafe_allow_html=True)
 
-    # 툴 4: 워크스페이스별 단골 주소록
     with st.expander("📇 거래처 주소록 & 자동 완성"):
         client_names = [c["name"] for c in clients_db]
         if client_names:
@@ -580,7 +602,7 @@ def bg_analysis_worker(api_key, model_name, file_bytes, mime_type, filename, tas
     task_store["status"] = "error"
 
 # ==========================================
-# 7. PDF 견적서 생성기 (업체별 고유 공급사 반영)
+# 7. PDF 견적서 생성기
 # ==========================================
 def create_formal_pdf(q, company_info):
     pdf = FPDF(format="A4")
@@ -631,7 +653,6 @@ def create_formal_pdf(q, company_info):
     pdf.set_x(12)
     pdf.cell(86, 5, f"진행상태: {q.get('status', '1. 견적제출')}", ln=True)
 
-    # 해당 업체의 고유 공급사 정보 인쇄
     c_info = company_info
     pdf.rect(105, y_pos, 95, 30)
     pdf.set_xy(107, y_pos + 2)
@@ -1079,7 +1100,7 @@ with tabs[3]:
 with tabs[4]:
     # 1. 슈퍼 관리자 전용: 고객사 워크스페이스 신규 발급 & 관리
     if is_super_admin:
-        st.markdown('<div class="panel-card"><div class="panel-title">고객사 워크스페이스 신규 생성 (Super Admin 전용)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-card"><div class="panel-title">고객사 워크스페이스 신규 발급 & 관리 (총괄 마스터 전용)</div>', unsafe_allow_html=True)
         nc1, nc2, nc3, nc4 = st.columns(4)
         with nc1:
             new_comp_name = st.text_input("고객사(공장) 상호명", placeholder="예: (주)삼우정밀")
@@ -1099,14 +1120,12 @@ with tabs[4]:
             elif new_comp_admin_id in users_db:
                 st.error("이미 사용 중인 계정 아이디입니다.")
             else:
-                # 1) 업체 등록
                 companies_db[clean_code] = {
                     "name": new_comp_name.strip(),
                     "created_at": datetime.now().strftime("%Y-%m-%d")
                 }
                 save_json(COMPANIES_META_FILE, companies_db)
 
-                # 2) 업체 대표 계정 생성
                 users_db[new_comp_admin_id] = {
                     "password": new_comp_admin_pw,
                     "name": f"{new_comp_name} 관리자",
@@ -1116,7 +1135,6 @@ with tabs[4]:
                 }
                 save_json(USERS_FILE, users_db)
 
-                # 3) 전용 디렉토리 및 기본 설정 초기화
                 comp_dir = get_tenant_dir(clean_code)
                 init_settings = DEFAULT_SETTINGS.copy()
                 init_settings["company_info"]["company_name"] = new_comp_name.strip()
@@ -1124,7 +1142,7 @@ with tabs[4]:
                 save_tenant_data(clean_code, "orders_database.json", [])
                 save_tenant_data(clean_code, "clients_directory.json", [])
 
-                st.success(f"[{new_comp_name}] 워크스페이스가 생성되었습니다! 계정: {new_comp_admin_id}")
+                st.success(f"[{new_comp_name}] 워크스페이스가 생성되었습니다! 발급 ID: {new_comp_admin_id}")
                 st.rerun()
 
         st.markdown("##### 등록된 고객사 워크스페이스 목록")
@@ -1139,10 +1157,8 @@ with tabs[4]:
                     st.caption("시스템 마스터")
                 else:
                     if st.button("워크스페이스 삭제", key=f"del_comp_{cid}"):
-                        # 디렉토리 및 계정 삭제
                         del companies_db[cid]
                         save_json(COMPANIES_META_FILE, companies_db)
-                        # 소속 사용자 삭제
                         users_to_del = [u for u, dat in users_db.items() if dat.get("company_id") == cid]
                         for u in users_to_del:
                             del users_db[u]
