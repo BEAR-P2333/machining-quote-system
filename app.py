@@ -7,74 +7,61 @@ import json
 import base64
 import threading
 import time
+import math
 import calendar
 import hashlib
+import shutil
 import pandas as pd
 from fpdf import FPDF
 from datetime import datetime, timedelta
 
 # ==========================================
-# 0. 시스템 버전 및 릴리즈 노트 데이터
+# 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v1.4.0"
+CURRENT_SYSTEM_VERSION = "v2.0.0"
 
 SYSTEM_RELEASE_NOTES = [
     {
-        "version": "v1.4.0",
+        "version": "v2.0.0",
         "date": "2026-10-25",
-        "title": "보안 강화 및 릴리즈 노트 도입",
+        "title": "멀티테넌트(업체별 독립 워크스페이스) 아키텍처 구축",
         "details": [
-            "로그인 화면의 기본 계정 힌트 영구 제거 (보안 강화)",
-            "우측 상단 업데이트 릴리즈 노트 팝업 및 미확인 알림 점(Red Dot) 기능 추가",
-            "URL 접속 세션 안정화"
+            "업체별 물리 데이터 격리(/companies/{company_id}/)로 상호 데이터 유출 원천 차단",
+            "총괄 관리자(Super Admin) 전용 워크스페이스 실시간 스위칭 뷰어 탑재",
+            "신규 가공업체 계정 및 전용 워크스페이스 원클릭 프로비저닝 기능 탑재",
+            "업체별 고유 공급사 정보, 단가표, 발주 이력, 거래처 주소록 분리 보관"
         ]
     },
     {
-        "version": "v1.3.0",
-        "date": "2026-10-24",
-        "title": "한국 가공업 표준 산식 & 가드레일 탑재",
+        "version": "v1.5.0",
+        "date": "2026-10-25",
+        "title": "사이드바 엔지니어 퀵 툴박스 탑재 및 보안 격리",
         "details": [
-            "원소재 가공 여유분 로스율(15~25%) 산식 공식 결합",
-            "최소 가공비(MIM) 보정 가드레일 엔진 탑재 (저가 견적 원천 차단)",
-            "현장 사장님 전용 실시간 검수 슬라이더바(가공시간, 난이도 배율) 추가",
-            "2열(Left: 입력 / Right: 실시간 원가 대시보드) 엔터프라이즈 UX 개편"
-        ]
-    },
-    {
-        "version": "v1.2.0",
-        "date": "2026-10-22",
-        "title": "비동기 분석 및 한국식 달력 도입",
-        "details": [
-            "AI 도면 분석 백그라운드 멀티스레딩 처리 (작업 중 화면 멈춤 해소)",
-            "503 트래픽 과부하 대비 지수 백오프 자동 재시도 및 모델 폴백",
-            "한국 표준 월간 납기 캘린더 그리드 뷰 구현"
+            "API 키 UI 제거 및 백엔드 Secrets 완전 격리",
+            "소재 중량 계산기, 절삭 조건(RPM/Feed) 계산기, 긴급 납기 모니터링 탑재"
         ]
     }
 ]
 
 # ==========================================
-# 1. 파일 경로 및 시스템 데이터베이스 관리
+# 1. 파일 경로 및 멀티테넌트 데이터베이스 관리
 # ==========================================
 DATA_DIR = os.path.dirname(os.path.abspath(__file__))
-SETTINGS_FILE = os.path.join(DATA_DIR, "pricing_settings.json")
-ORDERS_FILE = os.path.join(DATA_DIR, "orders_database.json")
-USERS_FILE = os.path.join(DATA_DIR, "system_users.json")
-AUTH_SECRET_KEY = "costify_secure_auth_salt_2026"
+COMPANIES_BASE_DIR = os.path.join(DATA_DIR, "companies")
+os.makedirs(COMPANIES_BASE_DIR, exist_ok=True)
 
-DEFAULT_USERS = {
-    "admin": {"password": "admin1234!", "name": "총괄관리자", "role": "admin", "last_seen_version": ""},
-    "factory1": {"password": "factory1234!", "name": "제1가공공장", "role": "user", "last_seen_version": ""},
-    "sales": {"password": "sales1234!", "name": "영업팀장", "role": "user", "last_seen_version": ""}
-}
+COMPANIES_META_FILE = os.path.join(DATA_DIR, "companies_registry.json")
+USERS_FILE = os.path.join(DATA_DIR, "system_users.json")
+AUTH_SECRET_KEY = "costify_multi_tenant_secret_2026"
 
 DEFAULT_SETTINGS = {
     "company_info": {
-        "company_name": "Costify 가공 솔루션",
+        "company_name": "Costify 표준 공장",
         "biz_num": "123-45-67890",
         "ceo_name": "홍길동",
         "tel": "031-123-4567",
         "email": "contact@costify.ai",
-        "address": "경기도 시흥시 시화벤처로 123 Costify 빌딩"
+        "address": "경기도 시흥시 시화벤처로 123"
     },
     "materials": {
         "AL6061 / 알루미늄": 5500,
@@ -102,6 +89,23 @@ DEFAULT_SETTINGS = {
     "default_margin_rate": 20
 }
 
+DEFAULT_COMPANIES = {
+    "master_workspace": {
+        "name": "Costify 본사 마스터",
+        "created_at": "2026-10-25"
+    }
+}
+
+DEFAULT_USERS = {
+    "admin": {
+        "password": "admin1234!",
+        "name": "시스템 총괄마스터",
+        "role": "super_admin",
+        "company_id": "master_workspace",
+        "last_seen_version": ""
+    }
+}
+
 STAGE_CONFIG = {
     "1. 견적제출": {"color": "#64748b", "name": "견적제출"},
     "2. 발주확정": {"color": "#0284c7", "name": "발주확정"},
@@ -112,6 +116,14 @@ STAGE_CONFIG = {
     "7. 출하완료": {"color": "#059669", "name": "출하완료"}
 }
 PROCESS_STAGES = list(STAGE_CONFIG.keys())
+
+DENSITY_TABLE = {
+    "알루미늄 (AL6061)": 2.70,
+    "스테인리스 (SUS304)": 7.93,
+    "일반철/탄소강 (SS400/S45C)": 7.85,
+    "황동/동 (Brass/Copper)": 8.50,
+    "엔지니어링 플라스틱 (POM/MC나일론)": 1.42
+}
 
 def load_json(path, default):
     if os.path.exists(path):
@@ -129,14 +141,27 @@ def save_json(path, data):
 def generate_session_token(uid):
     return hashlib.sha256(f"{uid}_{AUTH_SECRET_KEY}".encode()).hexdigest()[:16]
 
+# 테넌트 전용 데이터 입출력 헬퍼
+def get_tenant_dir(company_id):
+    p = os.path.join(COMPANIES_BASE_DIR, company_id)
+    os.makedirs(p, exist_ok=True)
+    return p
+
+def load_tenant_data(company_id, filename, default_val):
+    path = os.path.join(get_tenant_dir(company_id), filename)
+    return load_json(path, default_val)
+
+def save_tenant_data(company_id, filename, data):
+    path = os.path.join(get_tenant_dir(company_id), filename)
+    save_json(path, data)
+
+companies_db = load_json(COMPANIES_META_FILE, DEFAULT_COMPANIES)
 users_db = load_json(USERS_FILE, DEFAULT_USERS)
-settings = load_json(SETTINGS_FILE, DEFAULT_SETTINGS)
-orders_db = load_json(ORDERS_FILE, [])
 
 # ==========================================
-# 2. UI 테마 & 로그인 영구 세션 관리
+# 2. UI 테마 & 로그인 세션 관리
 # ==========================================
-st.set_page_config(page_title="Costify | 정밀 절삭가공 견적 & MES", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="Costify | 멀티테넌트 가공 견적 & MES", page_icon="⚙️", layout="wide")
 
 st.markdown("""
 <style>
@@ -193,17 +218,6 @@ st.markdown("""
         color: #e2e8f0;
     }
 
-    /* 릴리즈 노트 알림 점 */
-    .red-dot {
-        height: 8px;
-        width: 8px;
-        background-color: #ef4444;
-        border-radius: 50%;
-        display: inline-block;
-        margin-left: 4px;
-        box-shadow: 0 0 6px #ef4444;
-    }
-
     .cal-header {
         background-color: #0f172a;
         color: #64748b;
@@ -236,7 +250,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# URL 쿼리 파라미터를 통한 브라우저 새로고침 세션 유지
+# 브라우저 새로고침(F5) 세션 유지
 if "auth_user" not in st.session_state:
     st.session_state["auth_user"] = None
 
@@ -248,13 +262,13 @@ if not st.session_state["auth_user"] and query_uid and query_token:
         st.session_state["auth_user"] = users_db[query_uid]
         st.session_state["auth_user_id"] = query_uid
 
-# 미인증 상태 시 로그인 화면 렌더링 (보안 힌트 영구 삭제 완료)
+# 미로그인 상태 시 로그인 화면
 if not st.session_state["auth_user"]:
     _, login_col, _ = st.columns([1, 1.2, 1])
     with login_col:
         st.markdown("<br><br><br>", unsafe_allow_html=True)
         st.markdown("### COSTIFY PORTAL")
-        st.caption("정밀 절삭가공 표준 원가 산출 및 공정 관리 시스템")
+        st.caption("정밀 절삭가공 표준 원가 산출 및 MES 플랫폼")
         
         with st.form("login_form"):
             in_id = st.text_input("아이디 (ID)")
@@ -273,33 +287,67 @@ if not st.session_state["auth_user"]:
     st.stop()
 
 # ==========================================
-# 3. 우측 상단 헤더, 릴리즈 노트 & 세션 컨트롤
+# 3. 테넌트(업체 워크스페이스) 활성화 및 전환
+# ==========================================
+logged_user = st.session_state["auth_user"]
+is_super_admin = (logged_user.get("role") == "super_admin")
+
+# 총괄 관리자는 원하는 회사를 선택하여 이동 가능, 일반 사용자는 자기 회사에 고정
+if "active_company_id" not in st.session_state or not is_super_admin:
+    st.session_state["active_company_id"] = logged_user.get("company_id", "master_workspace")
+
+# 활성 워크스페이스의 데이터 세트 로드
+active_cid = st.session_state["active_company_id"]
+active_c_name = companies_db.get(active_cid, {}).get("name", "지정 워크스페이스")
+
+settings = load_tenant_data(active_cid, "pricing_settings.json", DEFAULT_SETTINGS)
+orders_db = load_tenant_data(active_cid, "orders_database.json", [])
+clients_db = load_tenant_data(active_cid, "clients_directory.json", [
+    {"name": "(주)한국정밀", "manager": "김철수 부장", "tel": "010-1234-5678"},
+    {"name": "대한메카트로닉스", "manager": "이영희 차장", "tel": "010-9876-5432"}
+])
+
+# ==========================================
+# 4. 상단 헤더, 마스터 스위처 & 릴리즈 노트
 # ==========================================
 current_user_id = st.session_state.get("auth_user_id")
 user_last_seen = users_db.get(current_user_id, {}).get("last_seen_version", "")
 has_new_update = (user_last_seen != CURRENT_SYSTEM_VERSION)
 
-head_left, head_right = st.columns([3.2, 1.8])
+head_left, head_right = st.columns([2.6, 2.4])
 with head_left:
-    st.markdown("### COSTIFY <span style='font-size:14px; font-weight:400; color:#64748b;'>| 정밀 가공 견적 & MES</span>", unsafe_allow_html=True)
+    st.markdown(f"### COSTIFY <span style='font-size:13px; font-weight:400; color:#38bdf8;'>[{active_c_name}]</span>", unsafe_allow_html=True)
 
 with head_right:
-    rel_col, prof_col, btn_col = st.columns([1.6, 2.0, 1.1])
-    
+    # 슈퍼 관리자용 워크스페이스 스위처
+    if is_super_admin:
+        sw_col, rel_col, prof_col, btn_col = st.columns([1.8, 1.1, 1.4, 0.9])
+        with sw_col:
+            c_options = list(companies_db.keys())
+            c_idx = c_options.index(active_cid) if active_cid in c_options else 0
+            new_selected_cid = st.selectbox(
+                "업체 전환",
+                c_options,
+                index=c_idx,
+                format_func=lambda x: f"🏢 {companies_db[x]['name']}",
+                label_visibility="collapsed"
+            )
+            if new_selected_cid != active_cid:
+                st.session_state["active_company_id"] = new_selected_cid
+                st.rerun()
+    else:
+        rel_col, prof_col, btn_col = st.columns([1.4, 2.2, 1.1])
+
     with rel_col:
-        # 미확인 업데이트 시 빨간 알림 점 표시
-        label_text = f"업데이트 {CURRENT_SYSTEM_VERSION} ●" if has_new_update else f"업데이트 {CURRENT_SYSTEM_VERSION}"
+        label_text = f"업데이트 ●" if has_new_update else "업데이트"
         with st.popover(label_text, use_container_width=True):
-            st.markdown(f"#### 시스템 릴리즈 노트")
-            st.caption(f"현재 설치 버전: **{CURRENT_SYSTEM_VERSION}**")
-            
+            st.markdown(f"#### 시스템 릴리즈 노트 ({CURRENT_SYSTEM_VERSION})")
             if has_new_update:
                 if st.button("확인 완료 (알림 끄기)", type="primary", use_container_width=True):
                     users_db[current_user_id]["last_seen_version"] = CURRENT_SYSTEM_VERSION
                     save_json(USERS_FILE, users_db)
                     st.rerun()
                 st.divider()
-
             for note in SYSTEM_RELEASE_NOTES:
                 st.markdown(f"**{note['version']}** ({note['date']}) - {note['title']}")
                 for d in note["details"]:
@@ -309,7 +357,7 @@ with head_right:
     with prof_col:
         st.markdown(f"""
         <div style="text-align: right; padding-top: 5px;">
-            <span class="profile-badge">● {st.session_state['auth_user']['name']} ({st.session_state['auth_user']['role']})</span>
+            <span class="profile-badge">● {logged_user['name']}</span>
         </div>
         """, unsafe_allow_html=True)
 
@@ -354,7 +402,129 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     components.html(js_code, height=42)
 
 # ==========================================
-# 4. 백그라운드 AI 분석 스레드 관리
+# 5. 사이드바: 활성 워크스페이스 전용 퀵 툴박스
+# ==========================================
+SECURE_API_KEY = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else os.environ.get("GEMINI_API_KEY", "")
+SYSTEM_AI_MODEL = "gemini-3.8-flash"
+
+with st.sidebar:
+    st.markdown(f"### 엔지니어 퀵 툴박스")
+    st.caption(f"접속 공간: **{active_c_name}**")
+    
+    # 툴 1: 긴급 납기 모니터링
+    with st.expander("🚨 긴급 납기 / 지연 건", expanded=True):
+        today = datetime.today().date()
+        urgent_orders = []
+        for o in orders_db:
+            if o.get("status") != "7. 출하완료":
+                try:
+                    d_dt = datetime.strptime(o.get("due_date", ""), "%Y-%m-%d").date()
+                    diff = (d_dt - today).days
+                    if diff < 0:
+                        urgent_orders.append((diff, f"⚠️ {abs(diff)}일 지연", o))
+                    elif diff <= 3:
+                        urgent_orders.append((diff, f"🔥 D-{diff}", o))
+                except Exception:
+                    pass
+        
+        urgent_orders.sort(key=lambda x: x[0])
+        if not urgent_orders:
+            st.caption("현재 납기 지연 및 임박 건이 없습니다.")
+        else:
+            for diff, tag, uo in urgent_orders[:5]:
+                st.markdown(f"""
+                <div style="background:#1e293b; border-left:3px solid #ef4444; padding:6px 8px; border-radius:4px; margin-bottom:6px; font-size:11px;">
+                    <b style="color:#f87171;">{tag}</b> | {uo.get('client_name')[:5]}<br>
+                    {uo.get('filename')[:12]} ({uo.get('qty')}EA) | <span style="color:#94a3b8;">{uo.get('status')}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # 툴 2: 소재 중량 & 비중 계산기
+    with st.expander("⚖️ 소재 중량 & 비중 계산기"):
+        shape_type = st.selectbox("형상 선택", ["사각 판재 (Plate)", "원형 환봉 (Round Bar)", "원형 파이프 (Pipe)"], index=0)
+        selected_mat_dens = st.selectbox("소재 종류 (비중)", list(DENSITY_TABLE.keys()), index=0)
+        dens_val = DENSITY_TABLE[selected_mat_dens]
+        
+        calc_weight_kg = 0.0
+        if shape_type == "사각 판재 (Plate)":
+            p_w = st.number_input("가로 W (mm)", value=100.0, step=10.0)
+            p_l = st.number_input("세로 L (mm)", value=150.0, step=10.0)
+            p_t = st.number_input("두께 T (mm)", value=20.0, step=5.0)
+            vol_cm3 = (p_w * p_l * p_t) / 1000.0
+            calc_weight_kg = (vol_cm3 * dens_val) / 1000.0
+        elif shape_type == "원형 환봉 (Round Bar)":
+            r_d = st.number_input("외경 OD (mm)", value=50.0, step=5.0)
+            r_l = st.number_input("길이 L (mm)", value=100.0, step=10.0)
+            vol_cm3 = (math.pi * ((r_d / 2.0) ** 2) * r_l) / 1000.0
+            calc_weight_kg = (vol_cm3 * dens_val) / 1000.0
+        else:
+            pi_od = st.number_input("외경 OD (mm)", value=60.0, step=5.0)
+            pi_id = st.number_input("내경 ID (mm)", value=40.0, step=5.0)
+            pi_l = st.number_input("길이 L (mm)", value=100.0, step=10.0)
+            vol_cm3 = (math.pi * (((pi_od / 2.0) ** 2) - ((pi_id / 2.0) ** 2)) * pi_l) / 1000.0
+            calc_weight_kg = max(0.0, (vol_cm3 * dens_val) / 1000.0)
+
+        st.markdown(f"""
+        <div style="background:#0f172a; padding:8px; border-radius:6px; border:1px solid #1e293b; text-align:center; margin:8px 0;">
+            <div style="font-size:11px; color:#94a3b8;">계산된 순수 중량</div>
+            <div style="font-size:18px; font-weight:700; color:#38bdf8;">{calc_weight_kg:.3f} kg</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("견적에 중량 즉시 반영", use_container_width=True):
+            st.session_state["injected_weight"] = round(calc_weight_kg, 2)
+            st.success(f"{calc_weight_kg:.2f} kg이 견적 중량으로 설정되었습니다.")
+            st.rerun()
+
+    # 툴 3: 절삭 조건 계산기
+    with st.expander("⚙️ 절삭 조건 (RPM/피드) 계산기"):
+        tool_d = st.number_input("공구 직경 D (mm)", value=10.0, step=1.0)
+        cut_vc = st.number_input("절삭속도 Vc (m/min)", value=120.0, step=10.0)
+        feed_fz = st.number_input("날당 이송 fz (mm/t)", value=0.08, step=0.01, format="%.3f")
+        tool_z = st.number_input("공구 날 수 Z", value=4, step=1)
+        cut_len = st.number_input("가공 거리 L (mm)", value=300.0, step=50.0)
+
+        calc_rpm = int((cut_vc * 1000.0) / (math.pi * tool_d)) if tool_d > 0 else 0
+        calc_feed = int(calc_rpm * feed_fz * tool_z)
+        calc_time_sec = int((cut_len / calc_feed) * 60) if calc_feed > 0 else 0
+
+        st.markdown(f"""
+        <div style="background:#0f172a; padding:8px; border-radius:6px; border:1px solid #1e293b; font-size:12px; margin-top:6px;">
+            주축 회전수: <b style="color:#f8fafc;">{calc_rpm:,} RPM</b><br>
+            이송속도: <b style="color:#f8fafc;">{calc_feed:,} mm/min</b><br>
+            1회 가공소요: <b style="color:#38bdf8;">{calc_time_sec // 60}분 {calc_time_sec % 60}초</b>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # 툴 4: 워크스페이스별 단골 주소록
+    with st.expander("📇 거래처 주소록 & 자동 완성"):
+        client_names = [c["name"] for c in clients_db]
+        if client_names:
+            sel_c_name = st.selectbox("단골 거래처 선택", client_names)
+            found_client = next((c for c in clients_db if c["name"] == sel_c_name), None)
+            
+            if found_client:
+                st.caption(f"담당: {found_client['manager']} ({found_client['tel']})")
+                if st.button("견적서에 즉시 반영", use_container_width=True):
+                    st.session_state["injected_client_name"] = found_client["name"]
+                    st.session_state["injected_client_manager"] = found_client["manager"]
+                    st.success(f"{found_client['name']} 정보가 입력되었습니다.")
+                    st.rerun()
+
+        st.markdown("---")
+        with st.popover("➕ 새 거래처 주소 등록"):
+            new_c_name = st.text_input("새 거래처 상호")
+            new_c_mgr = st.text_input("담당자명/직함")
+            new_c_tel = st.text_input("연락처")
+            if st.button("주소록에 저장", type="primary"):
+                if new_c_name:
+                    clients_db.append({"name": new_c_name, "manager": new_c_mgr, "tel": new_c_tel})
+                    save_tenant_data(active_cid, "clients_directory.json", clients_db)
+                    st.success("거래처가 저장되었습니다.")
+                    st.rerun()
+
+# ==========================================
+# 6. 비동기 AI 분석 스레드 관리
 # ==========================================
 if "bg_task" not in st.session_state:
     st.session_state["bg_task"] = {
@@ -383,10 +553,7 @@ def bg_analysis_worker(api_key, model_name, file_bytes, mime_type, filename, tas
     }
     """
     
-    models_to_try = [model_name]
-    if "gemini-2.5-flash" not in models_to_try:
-        models_to_try.append("gemini-2.5-flash")
-
+    models_to_try = [model_name, "gemini-2.5-flash"]
     last_error_msg = ""
     for target_model in models_to_try:
         for attempt in range(3):
@@ -409,25 +576,13 @@ def bg_analysis_worker(api_key, model_name, file_bytes, mime_type, filename, tas
                 else:
                     break
 
-    task_store["error"] = f"AI 서버 일시적 지연으로 연결 실패. 다시 시도해 주세요. ({last_error_msg})"
+    task_store["error"] = f"AI 서버 일시 지연: {last_error_msg}"
     task_store["status"] = "error"
 
-# 사이드바 설정
-with st.sidebar:
-    st.markdown("#### 시스템 설정")
-    default_api_key = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
-    api_key = st.text_input("Gemini API Key", value=default_api_key, type="password")
-    selected_model = st.selectbox("AI 비전 모델", ["gemini-3.8-flash", "gemini-2.5-flash"], index=0)
-    st.divider()
-    st.markdown("#### 기준 단가 요약")
-    st.caption(f"최소 공임 기준: {settings.get('min_machining_cost', 35000):,} 원")
-    st.caption(f"원소재 로스율: +{settings.get('default_material_loss', 20)} %")
-    st.caption(f"기준 마진율: {settings['default_margin_rate']} %")
-
 # ==========================================
-# 5. PDF 견적서 생성 유틸리티
+# 7. PDF 견적서 생성기 (업체별 고유 공급사 반영)
 # ==========================================
-def create_formal_pdf(q):
+def create_formal_pdf(q, company_info):
     pdf = FPDF(format="A4")
     pdf.add_page()
     
@@ -476,7 +631,8 @@ def create_formal_pdf(q):
     pdf.set_x(12)
     pdf.cell(86, 5, f"진행상태: {q.get('status', '1. 견적제출')}", ln=True)
 
-    c_info = settings["company_info"]
+    # 해당 업체의 고유 공급사 정보 인쇄
+    c_info = company_info
     pdf.rect(105, y_pos, 95, 30)
     pdf.set_xy(107, y_pos + 2)
     pdf.set_font(bold_font, size=9)
@@ -531,7 +687,7 @@ def create_formal_pdf(q):
     return bytes(pdf.output())
 
 # ==========================================
-# 6. 메인 워크스페이스
+# 8. 메인 워크스페이스
 # ==========================================
 tabs = st.tabs(["실시간 견적 산출", "공정흐름 관리 (MES)", "납기 캘린더", "그룹 발주 관리", "시스템 설정"])
 
@@ -544,12 +700,15 @@ with tabs[0]:
     with left_col:
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">1. 발주 기본 정보</div>', unsafe_allow_html=True)
+            default_c_name = st.session_state.get("injected_client_name", "(주)한국정밀")
+            default_c_mgr = st.session_state.get("injected_client_manager", "김철수 부장")
+            
             c1, c2 = st.columns(2)
             with c1:
-                client_name = st.text_input("고객사(발주처)", value="(주)한국정밀")
+                client_name = st.text_input("고객사(발주처)", value=default_c_name)
                 order_qty = st.number_input("발주 수량 (EA)", min_value=1, value=10, step=1)
             with c2:
-                client_manager = st.text_input("담당자 성함/직함", value="김철수 부장")
+                client_manager = st.text_input("담당자 성함/직함", value=default_c_mgr)
                 due_date = st.date_input("납기 요청일", value=datetime.today() + timedelta(days=12))
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -571,18 +730,20 @@ with tabs[0]:
                     file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                     open_in_new_tab_button(uploaded_file.getvalue(), file_mime, label="도면 새 창 열기")
 
-                if start_ai and uploaded_file and api_key:
+                if start_ai and uploaded_file and SECURE_API_KEY:
                     if st.session_state["bg_task"]["status"] != "running":
                         st.session_state["bg_task"]["status"] = "running"
                         st.session_state["bg_task"]["result"] = None
                         st.session_state["bg_task"]["error"] = None
                         t = threading.Thread(
                             target=bg_analysis_worker,
-                            args=(api_key, selected_model, uploaded_file.getvalue(), file_mime, uploaded_file.name, st.session_state["bg_task"])
+                            args=(SECURE_API_KEY, SYSTEM_AI_MODEL, uploaded_file.getvalue(), file_mime, uploaded_file.name, st.session_state["bg_task"])
                         )
                         t.daemon = True
                         t.start()
                         st.rerun()
+                elif start_ai and not SECURE_API_KEY:
+                    st.error("서버에 등록된 API 키가 없습니다. Streamlit Secrets를 확인하세요.")
             else:
                 st.session_state["manual_filename"] = st.text_input("품목명 / 도면 식별 번호", value="BRACKET-M01")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -590,7 +751,7 @@ with tabs[0]:
         active_analysis = st.session_state["bg_task"].get("result")
         current_fname = st.session_state["bg_task"].get("filename", "") if quote_mode == "AI 비전 도면 자동 판독" else st.session_state.get("manual_filename", "수동품목")
 
-        ai_pure_weight = float(active_analysis.get("pure_weight_kg", 0.5)) if active_analysis else 0.5
+        base_weight = st.session_state.get("injected_weight", float(active_analysis.get("pure_weight_kg", 0.5)) if active_analysis else 0.5)
         ai_loss_rate = float(active_analysis.get("cutting_loss_percent", settings.get("default_material_loss", 20))) if active_analysis else float(settings.get("default_material_loss", 20))
         ai_hours = float(active_analysis.get("estimated_machining_hours", 0.5)) if active_analysis else 0.5
         ai_difficulty_factor = float(active_analysis.get("difficulty_factor", 1.0)) if active_analysis else 1.0
@@ -619,7 +780,7 @@ with tabs[0]:
                             def_mac_idx = idx
                             break
                 sel_machine = st.selectbox("적용 가공 설비", mac_keys, index=def_mac_idx)
-                adj_pure_weight = st.number_input("완제품 중량 (kg)", value=float(round(ai_pure_weight, 2)), step=0.05, format="%.2f")
+                adj_pure_weight = st.number_input("완제품 중량 (kg)", value=float(round(base_weight, 2)), step=0.05, format="%.2f")
 
             adj_hours = st.slider("개당 가공 소요시간 (h)", min_value=0.1, max_value=15.0, value=float(round(ai_hours, 2)), step=0.05)
             
@@ -690,7 +851,7 @@ with tabs[0]:
             "unit_price": final_unit_price,
             "memo": order_memo
         }
-        pdf_bytes = create_formal_pdf(quote_payload)
+        pdf_bytes = create_formal_pdf(quote_payload, settings["company_info"])
 
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">견적 산출 브레이크다운</div>', unsafe_allow_html=True)
@@ -721,10 +882,10 @@ with tabs[0]:
             with b1:
                 st.download_button("견적서 PDF 다운로드", data=pdf_bytes, file_name=f"{quote_no}_{client_name}.pdf", mime="application/pdf", type="primary", use_container_width=True)
             with b2:
-                if st.button("시스템 데이터베이스 저장", use_container_width=True):
+                if st.button("현재 워크스페이스에 저장", use_container_width=True):
                     orders_db.insert(0, quote_payload)
-                    save_json(ORDERS_FILE, orders_db)
-                    st.success(f"견적 [{quote_no}] 등록 완료")
+                    save_tenant_data(active_cid, "orders_database.json", orders_db)
+                    st.success(f"[{active_c_name}] 데이터베이스에 저장 완료")
                     st.rerun()
 
             open_in_new_tab_button(pdf_bytes, "application/pdf", label="정식 견적서 새 창 열기 (인쇄)")
@@ -791,7 +952,7 @@ with tabs[1]:
                                 orders_db[real_idx]["status"] = new_status
                                 orders_db[real_idx]["memo"] = new_memo
                                 break
-                        save_json(ORDERS_FILE, orders_db)
+                        save_tenant_data(active_cid, "orders_database.json", orders_db)
                         st.success("저장 완료")
                         st.rerun()
 
@@ -895,7 +1056,7 @@ with tabs[3]:
             for o in orders_db:
                 if o["id"] in selected_ids:
                     o["group_id"] = group_title_input.strip()
-            save_json(ORDERS_FILE, orders_db)
+            save_tenant_data(active_cid, "orders_database.json", orders_db)
             st.success("그룹화 완료")
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
@@ -913,72 +1074,87 @@ with tabs[3]:
             st.dataframe(pd.DataFrame(sub_rows), use_container_width=True)
 
 # ------------------------------------------
-# TAB 5: 시스템 설정 & 인가 계정 관리
+# TAB 5: 시스템 설정 & 테넌트 관리
 # ------------------------------------------
 with tabs[4]:
-    st.markdown('<div class="panel-card"><div class="panel-title">사용자 계정 관리</div>', unsafe_allow_html=True)
-    if st.session_state["auth_user"]["role"] != "admin":
-        st.warning("계정 관리 기능은 총괄 관리자(admin) 전용입니다.")
-    else:
-        uc1, uc2 = st.columns([1.5, 2.5])
-        with uc1:
-            st.markdown("##### 신규 계정 등록")
-            new_uid = st.text_input("아이디")
-            new_upw = st.text_input("비밀번호", type="password")
-            new_uname = st.text_input("담당자명/공장명")
-            new_urole = st.selectbox("권한", ["user", "admin"])
-            if st.button("계정 생성", type="primary"):
-                if new_uid and new_upw:
-                    users_db[new_uid] = {"password": new_upw, "name": new_uname, "role": new_urole, "last_seen_version": ""}
-                    save_json(USERS_FILE, users_db)
-                    st.success(f"계정 [{new_uid}] 등록 완료")
-                    st.rerun()
+    # 1. 슈퍼 관리자 전용: 고객사 워크스페이스 신규 발급 & 관리
+    if is_super_admin:
+        st.markdown('<div class="panel-card"><div class="panel-title">고객사 워크스페이스 신규 생성 (Super Admin 전용)</div>', unsafe_allow_html=True)
+        nc1, nc2, nc3, nc4 = st.columns(4)
+        with nc1:
+            new_comp_name = st.text_input("고객사(공장) 상호명", placeholder="예: (주)삼우정밀")
+        with nc2:
+            new_comp_code = st.text_input("업체 식별 코드(영문소문자)", placeholder="예: samwoo")
+        with nc3:
+            new_comp_admin_id = st.text_input("업체 대표 계정 ID", placeholder="예: samwoo_admin")
+        with nc4:
+            new_comp_admin_pw = st.text_input("초기 비밀번호", type="password")
 
-        with uc2:
-            st.markdown("##### 등록 계정 목록 및 관리")
-            for uid, uinfo in list(users_db.items()):
-                u_row1, u_row2, u_row3 = st.columns([2.5, 2, 1])
-                with u_row1:
-                    st.write(f"**{uid}** ({uinfo['name']})")
-                with u_row2:
-                    st.caption(f"권한: `{uinfo['role']}`")
-                with u_row3:
-                    if uid == "admin":
-                        st.caption("시스템 마스터")
-                    elif uid == st.session_state.get("auth_user_id"):
-                        st.caption("접속 중")
-                    else:
-                        if st.button("삭제", key=f"del_{uid}"):
-                            del users_db[uid]
-                            save_json(USERS_FILE, users_db)
-                            st.success(f"[{uid}] 계정이 삭제되었습니다.")
-                            st.rerun()
-                st.divider()
-    st.markdown('</div>', unsafe_allow_html=True)
+        if st.button("신규 고객사 워크스페이스 생성 및 발급", type="primary"):
+            clean_code = new_comp_code.strip().lower()
+            if not clean_code or not new_comp_name or not new_comp_admin_id or not new_comp_admin_pw:
+                st.error("모든 항목을 입력하세요.")
+            elif clean_code in companies_db:
+                st.error("이미 존재하는 업체 식별 코드입니다.")
+            elif new_comp_admin_id in users_db:
+                st.error("이미 사용 중인 계정 아이디입니다.")
+            else:
+                # 1) 업체 등록
+                companies_db[clean_code] = {
+                    "name": new_comp_name.strip(),
+                    "created_at": datetime.now().strftime("%Y-%m-%d")
+                }
+                save_json(COMPANIES_META_FILE, companies_db)
 
-    st.markdown('<div class="panel-card"><div class="panel-title">데이터베이스 백업 & 복원</div>', unsafe_allow_html=True)
-    bk1, bk2 = st.columns(2)
-    with bk1:
-        st.download_button(
-            "전체 수주 데이터 백업 파일 다운로드",
-            data=json.dumps(orders_db, ensure_ascii=False, indent=2),
-            file_name=f"costify_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-            mime="application/json",
-            use_container_width=True
-        )
-    with bk2:
-        restore_file = st.file_uploader("백업 JSON 파일 업로드 복원", type=["json"])
-        if restore_file and st.button("데이터 복원 실행", use_container_width=True):
-            try:
-                orders_db = json.load(restore_file)
-                save_json(ORDERS_FILE, orders_db)
-                st.success("데이터베이스 복원 성공")
+                # 2) 업체 대표 계정 생성
+                users_db[new_comp_admin_id] = {
+                    "password": new_comp_admin_pw,
+                    "name": f"{new_comp_name} 관리자",
+                    "role": "company_admin",
+                    "company_id": clean_code,
+                    "last_seen_version": ""
+                }
+                save_json(USERS_FILE, users_db)
+
+                # 3) 전용 디렉토리 및 기본 설정 초기화
+                comp_dir = get_tenant_dir(clean_code)
+                init_settings = DEFAULT_SETTINGS.copy()
+                init_settings["company_info"]["company_name"] = new_comp_name.strip()
+                save_tenant_data(clean_code, "pricing_settings.json", init_settings)
+                save_tenant_data(clean_code, "orders_database.json", [])
+                save_tenant_data(clean_code, "clients_directory.json", [])
+
+                st.success(f"[{new_comp_name}] 워크스페이스가 생성되었습니다! 계정: {new_comp_admin_id}")
                 st.rerun()
-            except Exception as e:
-                st.error(f"복원 오류: {str(e)}")
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="panel-card"><div class="panel-title">공급사 정보 및 기준 단가 설정</div>', unsafe_allow_html=True)
+        st.markdown("##### 등록된 고객사 워크스페이스 목록")
+        for cid, cinfo in list(companies_db.items()):
+            row_c1, row_c2, row_c3 = st.columns([2.5, 2, 1])
+            with row_c1:
+                st.write(f"🏢 **{cinfo['name']}** (`{cid}`)")
+            with row_c2:
+                st.caption(f"생성일자: {cinfo.get('created_at', '-')}")
+            with row_c3:
+                if cid == "master_workspace":
+                    st.caption("시스템 마스터")
+                else:
+                    if st.button("워크스페이스 삭제", key=f"del_comp_{cid}"):
+                        # 디렉토리 및 계정 삭제
+                        del companies_db[cid]
+                        save_json(COMPANIES_META_FILE, companies_db)
+                        # 소속 사용자 삭제
+                        users_to_del = [u for u, dat in users_db.items() if dat.get("company_id") == cid]
+                        for u in users_to_del:
+                            del users_db[u]
+                        save_json(USERS_FILE, users_db)
+                        shutil.rmtree(os.path.join(COMPANIES_BASE_DIR, cid), ignore_errors=True)
+                        st.success(f"[{cid}] 워크스페이스가 삭제되었습니다.")
+                        st.rerun()
+            st.divider()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # 2. 현재 워크스페이스의 공급자 정보 및 기준 단가표
+    st.markdown(f'<div class="panel-card"><div class="panel-title">[{active_c_name}] 공급사 정보 및 기준 단가 설정</div>', unsafe_allow_html=True)
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
         c_name = st.text_input("상호명", value=settings["company_info"]["company_name"])
@@ -1005,7 +1181,7 @@ with tabs[4]:
         st.markdown("**표면처리 개당 단가 (원)**")
         up_surfaces = {k: st.number_input(f"{k}", value=int(v), step=500) for k, v in settings["surface_treatments"].items()}
 
-    if st.button("모든 단가 및 설정 저장", type="primary", use_container_width=True):
+    if st.button("현재 워크스페이스 단가 및 공급사 정보 저장", type="primary", use_container_width=True):
         new_conf = {
             "company_info": {"company_name": c_name, "biz_num": c_biz, "ceo_name": c_ceo, "tel": c_tel, "email": c_email, "address": c_addr},
             "materials": up_materials,
@@ -1016,6 +1192,29 @@ with tabs[4]:
             "default_material_loss": settings.get("default_material_loss", 20),
             "default_margin_rate": up_margin
         }
-        save_json(SETTINGS_FILE, new_conf)
-        st.success("설정이 저장되었습니다.")
+        save_tenant_data(active_cid, "pricing_settings.json", new_conf)
+        st.success(f"[{active_c_name}] 전용 단가표 및 공급사 정보가 저장되었습니다.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # 3. 현재 워크스페이스 전용 데이터 백업 / 복원
+    st.markdown(f'<div class="panel-card"><div class="panel-title">[{active_c_name}] 전용 데이터 백업 & 복원</div>', unsafe_allow_html=True)
+    bk1, bk2 = st.columns(2)
+    with bk1:
+        st.download_button(
+            f"[{active_c_name}] 수주 데이터 백업 다운로드",
+            data=json.dumps(orders_db, ensure_ascii=False, indent=2),
+            file_name=f"costify_{active_cid}_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    with bk2:
+        restore_file = st.file_uploader(f"[{active_c_name}] 백업 JSON 업로드 복원", type=["json"])
+        if restore_file and st.button("데이터 복원 실행", use_container_width=True):
+            try:
+                restored = json.load(restore_file)
+                save_tenant_data(active_cid, "orders_database.json", restored)
+                st.success("데이터베이스 복원 성공")
+                st.rerun()
+            except Exception as e:
+                st.error(f"복원 오류: {str(e)}")
     st.markdown('</div>', unsafe_allow_html=True)
