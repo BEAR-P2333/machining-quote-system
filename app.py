@@ -18,26 +18,27 @@ from datetime import datetime, timedelta
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.1.0"
+CURRENT_SYSTEM_VERSION = "v2.1.1"
 
 SYSTEM_RELEASE_NOTES = [
+    {
+        "version": "v2.1.1",
+        "date": "2026-10-25",
+        "title": "원가 브레이크다운 표 렌더링 복구 및 날짜창 스타일 통일",
+        "details": [
+            "원가 표 공백 들여쓰기 버그 수정(코드 블록 노출 현상 완전 해결)",
+            "납기 요청일(Date Input) 흰색 번짐 제거 및 다크 슬레이트 일원화",
+            "라디오 버튼 선택 인디케이터 코발트 블루 통일"
+        ]
+    },
     {
         "version": "v2.1.0",
         "date": "2026-10-25",
         "title": "시인성 및 UI 톤앤매너 전면 개편 (Slate & Cobalt 테마)",
         "details": [
             "하얗게 번지던 입력 필드와 업로더를 딥 슬레이트 고대비 스타일로 통일",
-            "눈 아픈 형광 레드 액션 컬러를 엔터프라이즈 코발트 블루로 전면 교체",
-            "우측 원가 브레이크다운 표의 배경 분절 문제 해결 및 가독성 극대화",
-            "모든 라벨과 보조 텍스트의 명도 대비를 상향하여 주야간 시인성 확보"
-        ]
-    },
-    {
-        "version": "v2.0.1",
-        "date": "2026-10-25",
-        "title": "마스터 권한 자동 승격 및 멀티테넌트 UI 복구",
-        "details": [
-            "admin 계정 슈퍼 관리자 권한 강제 보장 및 업체 전환 스위처 복구"
+            "형광 레드 액션 컬러를 엔터프라이즈 코발트 블루로 전면 교체",
+            "모든 라벨과 보조 텍스트의 명도 대비 상향"
         ]
     }
 ]
@@ -183,13 +184,13 @@ st.set_page_config(page_title="Costify | 정밀 절삭가공 견적 & MES", page
 
 st.markdown("""
 <style>
-    /* 1. 전역 배경 및 폰트 기본 명도 */
+    /* 전역 배경 */
     .stApp {
         background-color: #080d1a !important;
         color: #f1f5f9 !important;
     }
 
-    /* 2. 카드 패널 (은은한 입체감과 정돈된 테두리) */
+    /* 카드 패널 */
     .panel-card {
         background: #111a2e !important;
         border: 1px solid #1e2c47 !important;
@@ -209,14 +210,14 @@ st.markdown("""
         padding-bottom: 8px;
     }
 
-    /* 3. 텍스트 라벨 시인성 대폭 상향 (배경에 묻히는 문제 해결) */
+    /* 텍스트 라벨 시인성 상향 */
     label, .stWidgetLabel p, .stWidgetLabel span {
         color: #cbd5e1 !important;
         font-weight: 600 !important;
         font-size: 12.5px !important;
     }
 
-    /* 4. 입력 위젯(Input, Number, Selectbox) 다크 슬레이트 통일 (흰색 번짐 제거) */
+    /* 텍스트 및 숫자 입력 필드 */
     input, textarea {
         background-color: #090e1c !important;
         color: #f8fafc !important;
@@ -226,6 +227,20 @@ st.markdown("""
     input:focus, textarea:focus {
         border-color: #0284c7 !important;
         box-shadow: 0 0 0 1px #0284c7 !important;
+    }
+
+    /* 날짜 입력창(Date Input) 흰색 번짐 제거 및 다크 스타일링 */
+    [data-testid="stDateInput"] div[data-baseweb="input"] {
+        background-color: #090e1c !important;
+        border: 1px solid #283959 !important;
+        border-radius: 6px !important;
+    }
+    [data-testid="stDateInput"] input {
+        background-color: transparent !important;
+        color: #f8fafc !important;
+    }
+    [data-testid="stDateInput"] svg {
+        fill: #94a3b8 !important;
     }
 
     /* 셀렉트박스 다크 스타일링 */
@@ -240,7 +255,7 @@ st.markdown("""
         border: 1px solid #1e2c47 !important;
     }
 
-    /* 넘버 인풋의 증감(+/-) 버튼 */
+    /* 넘버 인풋 증감(+/-) 버튼 */
     [data-testid="stNumberInput"] button {
         background-color: #18233c !important;
         color: #cbd5e1 !important;
@@ -251,7 +266,7 @@ st.markdown("""
         color: #38bdf8 !important;
     }
 
-    /* 파일 업로더 흰색 번짐 제거 */
+    /* 파일 업로더 */
     [data-testid="stFileUploaderDropzone"] {
         background-color: #090e1c !important;
         border: 1px dashed #283959 !important;
@@ -263,7 +278,13 @@ st.markdown("""
         border: 1px solid #283959 !important;
     }
 
-    /* 5. 버튼 컬러 전면 개편 (형광 레드 제거 -> 신뢰감 있는 코발트 블루) */
+    /* 라디오 버튼 선택 인디케이터 블루 통일 */
+    [data-testid="stRadio"] [aria-checked="true"] div {
+        border-color: #0284c7 !important;
+        background-color: #0284c7 !important;
+    }
+
+    /* 버튼 스타일 (코발트 블루 일원화) */
     button[kind="primary"] {
         background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
         color: #ffffff !important;
@@ -289,7 +310,7 @@ st.markdown("""
         border-color: #38bdf8 !important;
     }
 
-    /* 6. 탭 메뉴 (붉은색 제거 -> 모던 블루 언더라인) */
+    /* 탭 메뉴 */
     .stTabs [data-baseweb="tab-list"] {
         gap: 12px;
         border-bottom: 1px solid #1e2c47 !important;
@@ -299,10 +320,6 @@ st.markdown("""
         color: #94a3b8 !important;
         font-weight: 600 !important;
         padding: 8px 16px !important;
-        border-radius: 4px 4px 0 0;
-    }
-    .stTabs [data-baseweb="tab"]:hover {
-        color: #f8fafc !important;
     }
     .stTabs [aria-selected="true"] {
         color: #38bdf8 !important;
@@ -310,7 +327,7 @@ st.markdown("""
         background-color: transparent !important;
     }
 
-    /* 7. 메트릭 컨테이너 */
+    /* 메트릭 박스 */
     .metric-container {
         background: #090e1c;
         border: 1px solid #1e2c47;
@@ -344,7 +361,7 @@ st.markdown("""
         color: #e2e8f0;
     }
 
-    /* 8. 캘린더 그리드 스타일 */
+    /* 캘린더 그리드 스타일 */
     .cal-header {
         background-color: #090e1c;
         color: #94a3b8;
@@ -993,7 +1010,7 @@ with tabs[0]:
                 </div>
                 """, unsafe_allow_html=True)
 
-            # 고시인성 다크 네이티브 원가 명세 테이블 (흰색 판 번짐 해결)
+            # 들여쓰기 공백 제거한 단일 문자열 HTML 테이블
             cost_items = [
                 ("1. 원재료비", f"개당 {round(raw_material_weight,2)}kg x {mat_unit_price:,}원 x {order_qty}EA", f"{mat_total_cost:,} 원"),
                 ("2. 순수가공비", f"{adj_hours}h x 시급 {mac_hourly_rate:,}원 x 난이도 {adj_difficulty}", f"{final_machining_cost:,} 원"),
@@ -1002,26 +1019,23 @@ with tabs[0]:
                 ("5. 관리비/마진", f"제조원가 대비 {margin_pct}%", f"{margin_amount:,} 원")
             ]
 
-            html_table = """
-            <table style="width:100%; border-collapse:collapse; margin-bottom:14px; font-size:12.5px;">
-                <thead>
-                    <tr style="border-bottom: 1px solid #1e2c47; color: #94a3b8; text-align: left;">
-                        <th style="padding: 7px 4px;">원가 항목</th>
-                        <th style="padding: 7px 4px;">산출 근거</th>
-                        <th style="padding: 7px 4px; text-align: right;">금액</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
-            for name, formula, price in cost_items:
-                html_table += f"""
-                    <tr style="border-bottom: 1px solid #152037; color: #f8fafc;">
-                        <td style="padding: 8px 4px; font-weight: 600;">{name}</td>
-                        <td style="padding: 8px 4px; color: #cbd5e1;">{formula}</td>
-                        <td style="padding: 8px 4px; text-align: right; font-weight: 700; color: #38bdf8;">{price}</td>
-                    </tr>
-                """
-            html_table += "</tbody></table>"
+            html_rows = "".join([
+                f'<tr style="border-bottom: 1px solid #1e2c47; color: #f8fafc;">'
+                f'<td style="padding: 9px 6px; font-weight: 600;">{name}</td>'
+                f'<td style="padding: 9px 6px; color: #cbd5e1;">{formula}</td>'
+                f'<td style="padding: 9px 6px; text-align: right; font-weight: 700; color: #38bdf8;">{price}</td>'
+                f'</tr>'
+                for name, formula, price in cost_items
+            ])
+
+            html_table = (
+                '<table style="width:100%; border-collapse:collapse; margin: 10px 0 16px 0; font-size: 13px;">'
+                '<thead><tr style="border-bottom: 2px solid #283959; color: #94a3b8; text-align: left;">'
+                '<th style="padding: 8px 6px;">원가 항목</th>'
+                '<th style="padding: 8px 6px;">산출 근거</th>'
+                '<th style="padding: 8px 6px; text-align: right;">금액</th>'
+                f'</tr></thead><tbody>{html_rows}</tbody></table>'
+            )
             st.markdown(html_table, unsafe_allow_html=True)
 
             b1, b2 = st.columns(2)
