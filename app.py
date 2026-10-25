@@ -6,6 +6,8 @@ import os
 import json
 import base64
 import threading
+import time
+import calendar
 import pandas as pd
 from fpdf import FPDF
 from datetime import datetime, timedelta
@@ -57,7 +59,17 @@ DEFAULT_SETTINGS = {
     "default_margin_rate": 25
 }
 
-PROCESS_STAGES = ["1. 견적제출", "2. 발주확정", "3. 소재입고", "4. 가공진행(MCT/선반)", "5. 열처리/후처리", "6. 치수검사/세척", "7. 출하완료"]
+# 공정 단계 및 고유 컬러 매핑
+STAGE_CONFIG = {
+    "1. 견적제출": {"color": "#64748b", "icon": "📝"},
+    "2. 발주확정": {"color": "#0284c7", "icon": "🔵"},
+    "3. 소재입고": {"color": "#eab308", "icon": "🟡"},
+    "4. 가공진행(MCT/선반)": {"color": "#f97316", "icon": "🟠"},
+    "5. 열처리/후처리": {"color": "#a855f7", "icon": "🟣"},
+    "6. 치수검사/세척": {"color": "#06b6d4", "icon": "🔷"},
+    "7. 출하완료": {"color": "#10b981", "icon": "🟢"}
+}
+PROCESS_STAGES = list(STAGE_CONFIG.keys())
 
 def load_json(path, default):
     if os.path.exists(path):
@@ -87,15 +99,50 @@ st.markdown("""
         background: #1e2430;
         border: 1px solid #334155;
         border-radius: 8px;
-        padding: 14px;
-        margin-bottom: 8px;
+        padding: 12px;
+        margin-bottom: 6px;
+        text-align: center;
     }
-    .metric-label { color: #94a3b8; font-size: 12px; font-weight: 500; }
-    .metric-value { color: #f8fafc; font-size: 22px; font-weight: 700; margin-top: 4px; }
+    .metric-label { color: #94a3b8; font-size: 11px; font-weight: 500; }
+    .metric-value { color: #f8fafc; font-size: 20px; font-weight: 700; margin-top: 2px; }
+    
+    /* 캘린더 그리드 스타일 */
+    .cal-header {
+        background-color: #0f172a;
+        color: #94a3b8;
+        padding: 8px;
+        text-align: center;
+        font-weight: 700;
+        border: 1px solid #334155;
+    }
+    .cal-day-cell {
+        min-height: 105px;
+        background-color: #1e293b;
+        border: 1px solid #334155;
+        padding: 6px;
+        vertical-align: top;
+    }
+    .cal-day-cell.other-month {
+        background-color: #0f172a;
+        opacity: 0.35;
+    }
+    .cal-day-cell.today {
+        border: 2px solid #38bdf8 !important;
+    }
+    .cal-badge {
+        font-size: 10px;
+        padding: 2px 4px;
+        border-radius: 3px;
+        margin-top: 3px;
+        color: white;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# 새 창(새 탭)에서 파일을 깨끗하게 열어주는 Blob 팝업 렌더러
 def open_in_new_tab_button(file_bytes, mime_type, label="🔍 새 창에서 전체화면 보기"):
     b64 = base64.b64encode(file_bytes).decode('utf-8')
     js_code = f"""
@@ -157,45 +204,62 @@ if not st.session_state["auth_user"]:
     st.stop()
 
 # ==========================================
-# 2. 백그라운드 AI 분석 스레드 관리
+# 2. 503 방어 백그라운드 AI 분석 엔진
 # ==========================================
 if "bg_task" not in st.session_state:
     st.session_state["bg_task"] = {
-        "status": "idle",  # idle, running, completed, error
+        "status": "idle",
         "result": None,
         "error": None,
         "filename": ""
     }
 
 def bg_analysis_worker(api_key, model_name, file_bytes, mime_type, filename, task_store):
-    try:
-        client = genai.Client(api_key=api_key.strip())
-        doc_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
-        prompt = """
-        당신은 20년 경력의 베테랑 절삭가공(MCT/CNC) 공장장입니다.
-        업로드된 도면을 분석하여 다음 항목을 반드시 순수한 JSON 형식으로만 추출하세요.
-        {
-            "material_type": "재질 (도면에 기재된 규격, 예: AL6061, SUS304, S45C, SS400 등)",
-            "estimated_weight_kg": 숫자 (원소재 예상 중량 kg, 소수점 둘째자리),
-            "estimated_machining_hours": 숫자 (순수 절삭 가공 소요 시간, 소수점 둘째자리),
-            "recommended_machine": "추천 설비 (3축 머시닝센터(MCT), 5축 머시닝센터(MCT), CNC 복합선반 중 택 1)",
-            "holes_count": 숫자 (가공 홀 총 개수),
-            "difficulty": "가공 난이도 (상, 중, 하)",
-            "reasoning": "산출 근거 (2줄 요약)"
-        }
-        """
-        response = client.models.generate_content(
-            model=model_name,
-            contents=[doc_part, prompt],
-            config=types.GenerateContentConfig(response_mime_type="application/json")
-        )
-        clean = response.text.strip().replace("```json", "").replace("```", "").strip()
-        task_store["result"] = json.loads(clean)
-        task_store["filename"] = filename
-        task_store["status"] = "completed"
-    except Exception as e:
-        task_store["error"] = str(e)
-        task_store["status"] = "error"
+    client = genai.Client(api_key=api_key.strip())
+    doc_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
+    prompt = """
+    당신은 20년 경력의 베테랑 절삭가공(MCT/CNC) 공장장입니다.
+    업로드된 도면을 분석하여 다음 항목을 반드시 순수한 JSON 형식으로만 추출하세요.
+    {
+        "material_type": "재질 (도면에 기재된 규격, 예: AL6061, SUS304, S45C, SS400 등)",
+        "estimated_weight_kg": 숫자 (원소재 예상 중량 kg, 소수점 둘째자리),
+        "estimated_machining_hours": 숫자 (순수 절삭 가공 소요 시간, 소수점 둘째자리),
+        "recommended_machine": "추천 설비 (3축 머시닝센터(MCT), 5축 머시닝센터(MCT), CNC 복합선반 중 택 1)",
+        "holes_count": 숫자 (가공 홀 총 개수),
+        "difficulty": "가공 난이도 (상, 중, 하)",
+        "reasoning": "산출 근거 (2줄 요약)"
+    }
+    """
+    
+    # 503 대비 모델 폴백 체인
+    models_to_try = [model_name]
+    if "gemini-2.5-flash" not in models_to_try:
+        models_to_try.append("gemini-2.5-flash")
+
+    last_error_msg = ""
+    for target_model in models_to_try:
+        for attempt in range(3):  # 최대 3회 자동 재시도
+            try:
+                response = client.models.generate_content(
+                    model=target_model,
+                    contents=[doc_part, prompt],
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                clean = response.text.strip().replace("```json", "").replace("```", "").strip()
+                task_store["result"] = json.loads(clean)
+                task_store["filename"] = filename
+                task_store["status"] = "completed"
+                return
+            except Exception as e:
+                last_error_msg = str(e)
+                if "503" in last_error_msg or "UNAVAILABLE" in last_error_msg or "429" in last_error_msg:
+                    time.sleep(2 * (attempt + 1))  # 2초, 4초, 6초 지수 대기
+                    continue
+                else:
+                    break  # 일반 에러는 루프 중단
+
+    task_store["error"] = f"구글 AI 트래픽 급증(503)으로 재시도 후에도 연결되지 않았습니다. 잠시 후 다시 시도해 주세요. ({last_error_msg})"
+    task_store["status"] = "error"
 
 # 상단 헤더
 head_l, head_r = st.columns([3, 1])
@@ -207,21 +271,20 @@ with head_r:
         st.session_state["auth_user"] = None
         st.rerun()
 
-# 사이드바 설정
+# 사이드바
 with st.sidebar:
     st.markdown("### ⚡ Costify 엔진")
     default_api_key = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
     api_key = st.text_input("Gemini API Key", value=default_api_key, type="password", help="Vision 분석용 API Key입니다.")
-    selected_model = st.selectbox("AI 모델", ["gemini-3.8-flash"], index=0)
+    selected_model = st.selectbox("기본 AI 모델", ["gemini-3.8-flash", "gemini-2.5-flash"], index=0)
     st.divider()
     st.caption(f"- 기본 셋업비: **{settings['default_setup_fee']:,} 원**")
     st.caption(f"- 표준 마진율: **{settings['default_margin_rate']} %**")
 
-# 백그라운드 작업 상태 표시 배너
 if st.session_state["bg_task"]["status"] == "running":
-    st.info("🔄 **[백그라운드 실행 중]** 도면을 분석하고 있습니다... 다른 탭에서 작업을 계속 진행하셔도 됩니다.")
+    st.info("🔄 **[백그라운드 실행 중]** 도면을 분석 중입니다... 다른 탭에서 작업을 계속 진행하셔도 됩니다.")
 elif st.session_state["bg_task"]["status"] == "completed":
-    st.success("✅ **[분석 완료]** 백그라운드 도면 분석이 완료되었습니다. 아래 견적 상세를 확인하세요.")
+    st.success("✅ **[분석 완료]** 도면 판독이 완료되었습니다. 아래 견적 상세를 확인하세요.")
 elif st.session_state["bg_task"]["status"] == "error":
     st.error(f"❌ 분석 실패: {st.session_state['bg_task']['error']}")
 
@@ -330,18 +393,18 @@ def create_formal_pdf(q):
     return bytes(pdf.output())
 
 # ==========================================
-# 4. 메인 워크스페이스 탭 구성
+# 4. 메인 탭 구성
 # ==========================================
 tab_quote, tab_process, tab_calendar, tab_history, tab_settings = st.tabs([
     "🚀 실시간 견적 산출",
     "🏭 공정흐름 관리 (MES)",
-    "📅 납기 캘린더",
+    "📅 납기 캘린더 (한국 표준)",
     "📦 묶음 발주 & 이력",
     "⚙️ 단가 및 시스템 관리"
 ])
 
 # ------------------------------------------
-# TAB 1: 실시간 견적 산출 (비동기 지원)
+# TAB 1: 실시간 견적 산출
 # ------------------------------------------
 with tab_quote:
     st.markdown("#### 1. 수주 기본 사양 등록")
@@ -369,11 +432,9 @@ with tab_quote:
             start_ai = st.button("⚡ AI 분석 시작 (백그라운드)", type="primary", use_container_width=True)
 
         if uploaded_file:
-            # 크롬 차단 문제 해결: 새 창에서 도면 전체화면 띄우기 버튼
             file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
             open_in_new_tab_button(uploaded_file.getvalue(), file_mime, label="🔍 [새 창] 업로드 도면 전체화면 확인")
 
-        # 백그라운드 분석 스레드 트리거
         if start_ai and uploaded_file and api_key:
             if st.session_state["bg_task"]["status"] != "running":
                 st.session_state["bg_task"]["status"] = "running"
@@ -398,7 +459,6 @@ with tab_quote:
     else:
         st.session_state["manual_filename"] = st.text_input("품목명 / 도면 품번", value="BRACKET-M01")
 
-    # 결과 및 파라미터 로딩
     active_analysis = st.session_state["bg_task"].get("result")
     current_fname = st.session_state["bg_task"].get("filename", "") if quote_mode == "🤖 AI 도면 비전 자동 판독" else st.session_state.get("manual_filename", "수동품목")
 
@@ -432,7 +492,6 @@ with tab_quote:
     with adj3:
         order_memo = st.text_input("현장 특이사항 / 도면 비고 메모", value=p_reasoning)
 
-    # 원가 계산
     tol_factor = 1.0
     if "정밀 공차" in tol_grade: tol_factor = 1.2
     elif "초정밀 공차" in tol_grade: tol_factor = 1.5
@@ -515,74 +574,179 @@ with tab_quote:
 
     with res2:
         st.markdown("#### 🖨️ 견적서 새 창 미리보기")
-        st.caption("※ 아래 버튼을 누르면 크롬 차단 없이 깨끗한 새 탭에서 즉시 열람 및 인쇄가 가능합니다.")
         open_in_new_tab_button(pdf_bytes, "application/pdf", label="🔍 [새 창] Costify 견적서 전체화면 열기")
 
 # ------------------------------------------
-# TAB 2: 공정흐름 관리 (MES 파이프라인)
+# TAB 2: 공정흐름 관리 (원클릭 필터링 & 시각적 파이프라인)
 # ------------------------------------------
 with tab_process:
-    st.subheader("🏭 Costify 공정 흐름 실시간 트래킹")
+    st.subheader("🏭 실시간 가공 공정흐름 관리 (MES)")
+    st.caption("상단 단계 버튼을 누르면 해당 공정 항목만 필터링되어 즉시 확인 가능합니다.")
+
+    if "stage_filter" not in st.session_state:
+        st.session_state["stage_filter"] = "전체"
+
     if not orders_db:
         st.info("등록된 가공 수주 건이 없습니다.")
     else:
-        stat_cols = st.columns(len(PROCESS_STAGES))
+        # 상단 원클릭 필터 카드 버튼
+        cols = st.columns(len(PROCESS_STAGES) + 1)
+        with cols[0]:
+            is_active = (st.session_state["stage_filter"] == "전체")
+            btn_label = f"📋 전체보기\n({len(orders_db)}건)"
+            if st.button(btn_label, use_container_width=True, type="primary" if is_active else "secondary"):
+                st.session_state["stage_filter"] = "전체"
+                st.rerun()
+
         for idx, stage in enumerate(PROCESS_STAGES):
-            count = sum(1 for o in orders_db if o.get("status") == stage)
-            with stat_cols[idx]:
-                st.markdown(f"<div class='metric-card'><div class='metric-label'>{stage}</div><div class='metric-value' style='font-size:18px;'>{count} 건</div></div>", unsafe_allow_html=True)
+            with cols[idx + 1]:
+                cnt = sum(1 for o in orders_db if o.get("status") == stage)
+                cfg = STAGE_CONFIG[stage]
+                is_active = (st.session_state["stage_filter"] == stage)
+                btn_label = f"{cfg['icon']} {stage.split('.')[1][:4]}\n({cnt}건)"
+                if st.button(btn_label, use_container_width=True, type="primary" if is_active else "secondary"):
+                    st.session_state["stage_filter"] = stage
+                    st.rerun()
+
+        # 필터링 적용
+        current_filter = st.session_state["stage_filter"]
+        filtered_orders = orders_db if current_filter == "전체" else [o for o in orders_db if o.get("status") == current_filter]
 
         st.divider()
-        for idx, o in enumerate(orders_db):
-            with st.expander(f"📌 [{o.get('quote_no')}] {o.get('client_name')} - {o.get('filename')} ({o.get('qty')}개 | {o.get('total_price',0):,}원 | 납기: {o.get('due_date')})"):
-                row1, row2, row3 = st.columns([1.5, 2.5, 1])
-                with row1:
-                    cur_idx = PROCESS_STAGES.index(o.get("status", PROCESS_STAGES[0])) if o.get("status") in PROCESS_STAGES else 0
-                    new_status = st.selectbox("공정 단계", PROCESS_STAGES, index=cur_idx, key=f"status_{o['id']}")
-                with row2:
-                    new_memo = st.text_input("현장 메모", value=o.get("memo", ""), key=f"memo_{o['id']}")
-                with row3:
-                    st.write("")
-                    st.write("")
-                    if st.button("💾 상태 저장", key=f"save_{o['id']}", use_container_width=True):
-                        orders_db[idx]["status"] = new_status
-                        orders_db[idx]["memo"] = new_memo
-                        save_json(ORDERS_FILE, orders_db)
-                        st.success("저장 완료")
-                        st.rerun()
+        st.markdown(f"##### 📌 **[{current_filter}]** 목록 (총 {len(filtered_orders)}건)")
+
+        if not filtered_orders:
+            st.info(f"현재 '{current_filter}' 단계에 있는 가공 건이 없습니다.")
+        else:
+            for idx, o in enumerate(filtered_orders):
+                stage_name = o.get("status", "1. 견적제출")
+                cfg = STAGE_CONFIG.get(stage_name, {"color": "#64748b", "icon": "📝"})
+                
+                # 육안으로 단번에 식별되는 헤더 레이블
+                header_title = f"{cfg['icon']} [{stage_name}] | {o.get('quote_no')} - {o.get('client_name')} : {o.get('filename')} ({o.get('qty')}EA) | 납기: {o.get('due_date')}"
+                
+                with st.expander(header_title, expanded=(current_filter != "전체")):
+                    # 1) 시각적 7단계 파이프라인 진행 바
+                    step_idx = PROCESS_STAGES.index(stage_name) if stage_name in PROCESS_STAGES else 0
+                    step_html = "<div style='display: flex; gap: 4px; margin-bottom: 12px;'>"
+                    for s_i, s_name in enumerate(PROCESS_STAGES):
+                        bg = STAGE_CONFIG[s_name]['color'] if s_i <= step_idx else "#334155"
+                        opac = "1.0" if s_i == step_idx else ("0.55" if s_i < step_idx else "0.25")
+                        border = "2px solid #fff" if s_i == step_idx else "1px solid #1e293b"
+                        step_html += f"<div style='flex:1; background-color:{bg}; opacity:{opac}; border:{border}; padding:6px 2px; text-align:center; border-radius:4px; font-size:11px; font-weight:700; color:#fff;'>{s_name.split('.')[1][:4]}</div>"
+                    step_html += "</div>"
+                    st.markdown(step_html, unsafe_allow_html=True)
+
+                    # 2) 상태 수정 및 현장 메모 작성 컨트롤
+                    row1, row2, row3 = st.columns([1.5, 2.5, 1])
+                    with row1:
+                        new_status = st.selectbox("진행 단계 변경", PROCESS_STAGES, index=step_idx, key=f"status_{o['id']}")
+                    with row2:
+                        new_memo = st.text_input("현장 공정 메모 (특이사항, 외주/열처리 현황 등)", value=o.get("memo", ""), key=f"memo_{o['id']}")
+                    with row3:
+                        st.write("")
+                        st.write("")
+                        if st.button("💾 상태 저장", key=f"save_{o['id']}", use_container_width=True):
+                            # 원본 DB에서 일치하는 건 수정
+                            for real_idx, target in enumerate(orders_db):
+                                if target["id"] == o["id"]:
+                                    orders_db[real_idx]["status"] = new_status
+                                    orders_db[real_idx]["memo"] = new_memo
+                                    break
+                            save_json(ORDERS_FILE, orders_db)
+                            st.success("공정 정보가 저장되었습니다.")
+                            st.rerun()
 
 # ------------------------------------------
-# TAB 3: 납기 캘린더
+# TAB 3: 납기 캘린더 (한국 표준 월간 달력)
 # ------------------------------------------
 with tab_calendar:
-    st.subheader("📅 납기 스케줄 & D-Day 모니터링")
-    if not orders_db:
-        st.info("스케줄링할 수주 건이 없습니다.")
-    else:
-        today = datetime.today().date()
-        cal_list = []
-        for o in orders_db:
-            due_str = o.get("due_date", "")
-            try:
-                due_dt = datetime.strptime(due_str, "%Y-%m-%d").date()
-                diff = (due_dt - today).days
-                if diff < 0: d_day_str = f"⚠️ {abs(diff)}일 지연"
-                elif diff == 0: d_day_str = "🔥 오늘 납기 (D-Day)"
-                else: d_day_str = f"D-{diff}"
-            except Exception:
-                d_day_str = "-"
+    st.subheader("📅 납기 캘린더 (한국 표준)")
+    
+    cal_mode = st.radio("보기 모드 선택", ["📆 월간 달력 그리드 (Korean Month Grid)", "📋 상세 납기 리스트"], horizontal=True)
 
-            cal_list.append({
-                "D-Day": d_day_str,
-                "납기일": o.get("due_date"),
-                "견적번호": o.get("quote_no"),
-                "고객사": o.get("client_name"),
-                "품목명": o.get("filename"),
-                "수량": f"{o.get('qty', 1):,} EA",
-                "현재공정": o.get("status"),
-                "현장메모": o.get("memo", "")
-            })
-        st.dataframe(pd.DataFrame(cal_list).sort_values(by="납기일"), use_container_width=True)
+    today = datetime.today().date()
+
+    if cal_mode == "📆 월간 달력 그리드 (Korean Month Grid)":
+        cal_col1, cal_col2, _ = st.columns([1.2, 1.2, 3])
+        with cal_col1:
+            cal_year = st.selectbox("연도 선택", range(today.year - 1, today.year + 3), index=1)
+        with cal_col2:
+            cal_month = st.selectbox("월 선택", range(1, 13), index=today.month - 1)
+
+        # 한국 달력: 일요일(Sunday=6 in firstweekday) 시작
+        cal = calendar.Calendar(firstweekday=6)
+        month_days = cal.monthdatescalendar(cal_year, cal_month)
+
+        # 요일 헤더
+        week_headers = ["일 (Sun)", "월 (Mon)", "화 (Tue)", "수 (Wed)", "목 (Thu)", "금 (Fri)", "토 (Sat)"]
+        grid_html = "<table style='width:100%; border-collapse:collapse; margin-top:8px;'><thead><tr>"
+        for i, wh in enumerate(week_headers):
+            color = "#f87171" if i == 0 else ("#60a5fa" if i == 6 else "#94a3b8")
+            grid_html += f"<th class='cal-header' style='color:{color}; width:14.28%;'>{wh}</th>"
+        grid_html += "</tr></thead><tbody>"
+
+        for week in month_days:
+            grid_html += "<tr>"
+            for day_date in week:
+                is_cur_month = (day_date.month == cal_month)
+                is_today = (day_date == today)
+                cell_class = "cal-day-cell"
+                if not is_cur_month: cell_class += " other-month"
+                if is_today: cell_class += " today"
+
+                day_str = day_date.strftime("%Y-%m-%d")
+                day_num = day_date.day
+
+                # 해당 일자에 납기인 발주 건 추출
+                matching_orders = [o for o in orders_db if o.get("due_date") == day_str]
+
+                grid_html += f"<td class='{cell_class}'>"
+                day_color = "#f87171" if day_date.weekday() == 6 else ("#60a5fa" if day_date.weekday() == 5 else "#f8fafc")
+                grid_html += f"<div style='font-weight:700; font-size:12px; color:{day_color};'>{day_num}</div>"
+
+                for mo in matching_orders:
+                    st_name = mo.get("status", "1. 견적제출")
+                    badge_color = STAGE_CONFIG.get(st_name, {}).get("color", "#0284c7")
+                    is_overdue = (day_date < today and st_name != "7. 출하완료")
+                    border_style = "border:1px solid #ef4444;" if is_overdue else ""
+                    tag_prefix = "⚠️ " if is_overdue else ""
+                    grid_html += f"<div class='cal-badge' style='background-color:{badge_color}; {border_style}' title='[{mo.get('client_name')}] {mo.get('filename')} ({mo.get('qty')}개) - {st_name}'>{tag_prefix}{mo.get('client_name')[:4]} | {mo.get('filename')[:6]}</div>"
+
+                grid_html += "</td>"
+            grid_html += "</tr>"
+        grid_html += "</tbody></table>"
+
+        st.markdown(grid_html, unsafe_allow_html=True)
+        st.caption("※ 붉은 테두리(⚠️): 납기일이 지났으나 아직 '7. 출하완료'되지 않은 지연 건입니다.")
+
+    else:
+        if not orders_db:
+            st.info("스케줄링할 수주 건이 없습니다.")
+        else:
+            cal_list = []
+            for o in orders_db:
+                due_str = o.get("due_date", "")
+                try:
+                    due_dt = datetime.strptime(due_str, "%Y-%m-%d").date()
+                    diff = (due_dt - today).days
+                    if diff < 0: d_day_str = f"⚠️ {abs(diff)}일 지연"
+                    elif diff == 0: d_day_str = "🔥 오늘 납기 (D-Day)"
+                    else: d_day_str = f"D-{diff}"
+                except Exception:
+                    d_day_str = "-"
+
+                cal_list.append({
+                    "D-Day": d_day_str,
+                    "납기일": o.get("due_date"),
+                    "견적번호": o.get("quote_no"),
+                    "고객사": o.get("client_name"),
+                    "품목명": o.get("filename"),
+                    "수량": f"{o.get('qty', 1):,} EA",
+                    "현재공정": o.get("status"),
+                    "현장메모": o.get("memo", "")
+                })
+            st.dataframe(pd.DataFrame(cal_list).sort_values(by="납기일"), use_container_width=True)
 
 # ------------------------------------------
 # TAB 4: 묶음 발주 & 이력
@@ -640,7 +804,6 @@ with tab_history:
 with tab_settings:
     st.subheader("⚙️ 단가표 및 Costify 데이터베이스 관리")
     
-    # 1. 영구 데이터 백업 & 복원 도구
     st.markdown("#### 1. 데이터 영구 보관 & 백업/복원")
     b_col1, b_col2 = st.columns(2)
     with b_col1:
@@ -666,7 +829,6 @@ with tab_settings:
                     st.error(f"복원 실패: {str(e)}")
 
     st.divider()
-    # 2. 계정 관리
     st.markdown("#### 2. 사용자 계정 관리 (회원가입 차단)")
     if st.session_state["auth_user"]["role"] != "admin":
         st.warning("계정 관리 기능은 관리자(admin) 전용입니다.")
@@ -689,7 +851,6 @@ with tab_settings:
             st.dataframe(pd.DataFrame([{"아이디": k, "이름": v["name"], "권한": v["role"]} for k, v in users_db.items()]), use_container_width=True)
 
     st.divider()
-    # 3. 공급사 정보 & 기준 단가표
     st.markdown("#### 3. 공급사 정보 및 공정별 기준 단가표")
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
