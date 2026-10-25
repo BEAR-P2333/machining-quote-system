@@ -14,7 +14,46 @@ from fpdf import FPDF
 from datetime import datetime, timedelta
 
 # ==========================================
-# 0. 경로 및 시스템 기본 데이터베이스
+# 0. 시스템 버전 및 릴리즈 노트 데이터
+# ==========================================
+CURRENT_SYSTEM_VERSION = "v1.4.0"
+
+SYSTEM_RELEASE_NOTES = [
+    {
+        "version": "v1.4.0",
+        "date": "2026-10-25",
+        "title": "보안 강화 및 릴리즈 노트 도입",
+        "details": [
+            "로그인 화면의 기본 계정 힌트 영구 제거 (보안 강화)",
+            "우측 상단 업데이트 릴리즈 노트 팝업 및 미확인 알림 점(Red Dot) 기능 추가",
+            "URL 접속 세션 안정화"
+        ]
+    },
+    {
+        "version": "v1.3.0",
+        "date": "2026-10-24",
+        "title": "한국 가공업 표준 산식 & 가드레일 탑재",
+        "details": [
+            "원소재 가공 여유분 로스율(15~25%) 산식 공식 결합",
+            "최소 가공비(MIM) 보정 가드레일 엔진 탑재 (저가 견적 원천 차단)",
+            "현장 사장님 전용 실시간 검수 슬라이더바(가공시간, 난이도 배율) 추가",
+            "2열(Left: 입력 / Right: 실시간 원가 대시보드) 엔터프라이즈 UX 개편"
+        ]
+    },
+    {
+        "version": "v1.2.0",
+        "date": "2026-10-22",
+        "title": "비동기 분석 및 한국식 달력 도입",
+        "details": [
+            "AI 도면 분석 백그라운드 멀티스레딩 처리 (작업 중 화면 멈춤 해소)",
+            "503 트래픽 과부하 대비 지수 백오프 자동 재시도 및 모델 폴백",
+            "한국 표준 월간 납기 캘린더 그리드 뷰 구현"
+        ]
+    }
+]
+
+# ==========================================
+# 1. 파일 경로 및 시스템 데이터베이스 관리
 # ==========================================
 DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_FILE = os.path.join(DATA_DIR, "pricing_settings.json")
@@ -23,9 +62,9 @@ USERS_FILE = os.path.join(DATA_DIR, "system_users.json")
 AUTH_SECRET_KEY = "costify_secure_auth_salt_2026"
 
 DEFAULT_USERS = {
-    "admin": {"password": "admin1234!", "name": "총괄관리자", "role": "admin"},
-    "factory1": {"password": "factory1234!", "name": "제1가공공장", "role": "user"},
-    "sales": {"password": "sales1234!", "name": "영업팀장", "role": "user"}
+    "admin": {"password": "admin1234!", "name": "총괄관리자", "role": "admin", "last_seen_version": ""},
+    "factory1": {"password": "factory1234!", "name": "제1가공공장", "role": "user", "last_seen_version": ""},
+    "sales": {"password": "sales1234!", "name": "영업팀장", "role": "user", "last_seen_version": ""}
 }
 
 DEFAULT_SETTINGS = {
@@ -95,13 +134,12 @@ settings = load_json(SETTINGS_FILE, DEFAULT_SETTINGS)
 orders_db = load_json(ORDERS_FILE, [])
 
 # ==========================================
-# 1. UI 환경 & 로그인 영구 세션 관리
+# 2. UI 테마 & 로그인 영구 세션 관리
 # ==========================================
 st.set_page_config(page_title="Costify | 정밀 절삭가공 견적 & MES", page_icon="⚙️", layout="wide")
 
 st.markdown("""
 <style>
-    /* B2B 엔터프라이즈 다크 테마 */
     .stApp { background-color: #0b0f19; }
     
     .panel-card {
@@ -146,16 +184,26 @@ st.markdown("""
     .profile-badge {
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         background: #1e293b;
         border: 1px solid #334155;
         border-radius: 6px;
-        padding: 5px 10px;
+        padding: 4px 10px;
         font-size: 12px;
         color: #e2e8f0;
     }
 
-    /* 캘린더 그리드 스타일 */
+    /* 릴리즈 노트 알림 점 */
+    .red-dot {
+        height: 8px;
+        width: 8px;
+        background-color: #ef4444;
+        border-radius: 50%;
+        display: inline-block;
+        margin-left: 4px;
+        box-shadow: 0 0 6px #ef4444;
+    }
+
     .cal-header {
         background-color: #0f172a;
         color: #64748b;
@@ -188,7 +236,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# URL 쿼리 파라미터를 이용한 세션 복원 (F5 새로고침 방어)
+# URL 쿼리 파라미터를 통한 브라우저 새로고침 세션 유지
 if "auth_user" not in st.session_state:
     st.session_state["auth_user"] = None
 
@@ -200,11 +248,11 @@ if not st.session_state["auth_user"] and query_uid and query_token:
         st.session_state["auth_user"] = users_db[query_uid]
         st.session_state["auth_user_id"] = query_uid
 
-# 미인증 상태 시 로그인 화면 렌더링
+# 미인증 상태 시 로그인 화면 렌더링 (보안 힌트 영구 삭제 완료)
 if not st.session_state["auth_user"]:
     _, login_col, _ = st.columns([1, 1.2, 1])
     with login_col:
-        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("<br><br><br>", unsafe_allow_html=True)
         st.markdown("### COSTIFY PORTAL")
         st.caption("정밀 절삭가공 표준 원가 산출 및 공정 관리 시스템")
         
@@ -217,37 +265,60 @@ if not st.session_state["auth_user"]:
                 if in_id in users_db and users_db[in_id]["password"] == in_pw:
                     st.session_state["auth_user"] = users_db[in_id]
                     st.session_state["auth_user_id"] = in_id
-                    # 쿼리 파라미터에 세션 토큰 저장 (새로고침 유지)
                     st.query_params["u"] = in_id
                     st.query_params["k"] = generate_session_token(in_id)
                     st.rerun()
                 else:
                     st.error("계정 정보가 일치하지 않습니다. 관리자에게 문의하세요.")
-        st.caption("초기 관리자 계정: admin / admin1234!")
     st.stop()
 
 # ==========================================
-# 2. 컴팩트 헤더 및 네비게이션
+# 3. 우측 상단 헤더, 릴리즈 노트 & 세션 컨트롤
 # ==========================================
-head_left, head_right = st.columns([3.5, 1.5])
+current_user_id = st.session_state.get("auth_user_id")
+user_last_seen = users_db.get(current_user_id, {}).get("last_seen_version", "")
+has_new_update = (user_last_seen != CURRENT_SYSTEM_VERSION)
+
+head_left, head_right = st.columns([3.2, 1.8])
 with head_left:
     st.markdown("### COSTIFY <span style='font-size:14px; font-weight:400; color:#64748b;'>| 정밀 가공 견적 & MES</span>", unsafe_allow_html=True)
 
 with head_right:
-    prof_col, btn_col = st.columns([3, 1])
+    rel_col, prof_col, btn_col = st.columns([1.6, 2.0, 1.1])
+    
+    with rel_col:
+        # 미확인 업데이트 시 빨간 알림 점 표시
+        label_text = f"업데이트 {CURRENT_SYSTEM_VERSION} ●" if has_new_update else f"업데이트 {CURRENT_SYSTEM_VERSION}"
+        with st.popover(label_text, use_container_width=True):
+            st.markdown(f"#### 시스템 릴리즈 노트")
+            st.caption(f"현재 설치 버전: **{CURRENT_SYSTEM_VERSION}**")
+            
+            if has_new_update:
+                if st.button("확인 완료 (알림 끄기)", type="primary", use_container_width=True):
+                    users_db[current_user_id]["last_seen_version"] = CURRENT_SYSTEM_VERSION
+                    save_json(USERS_FILE, users_db)
+                    st.rerun()
+                st.divider()
+
+            for note in SYSTEM_RELEASE_NOTES:
+                st.markdown(f"**{note['version']}** ({note['date']}) - {note['title']}")
+                for d in note["details"]:
+                    st.write(f"- {d}")
+                st.markdown("---")
+
     with prof_col:
         st.markdown(f"""
-        <div style="text-align: right; padding-top: 4px;">
+        <div style="text-align: right; padding-top: 5px;">
             <span class="profile-badge">● {st.session_state['auth_user']['name']} ({st.session_state['auth_user']['role']})</span>
         </div>
         """, unsafe_allow_html=True)
+
     with btn_col:
         if st.button("로그아웃", use_container_width=True):
             st.query_params.clear()
             st.session_state["auth_user"] = None
             st.rerun()
 
-# 새 창 팝업 헬퍼 함수
 def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     b64 = base64.b64encode(file_bytes).decode('utf-8')
     js_code = f"""
@@ -283,7 +354,7 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     components.html(js_code, height=42)
 
 # ==========================================
-# 3. 비동기 AI 분석 스레드 관리
+# 4. 백그라운드 AI 분석 스레드 관리
 # ==========================================
 if "bg_task" not in st.session_state:
     st.session_state["bg_task"] = {
@@ -354,7 +425,7 @@ with st.sidebar:
     st.caption(f"기준 마진율: {settings['default_margin_rate']} %")
 
 # ==========================================
-# 4. PDF 견적서 생성 유틸리티
+# 5. PDF 견적서 생성 유틸리티
 # ==========================================
 def create_formal_pdf(q):
     pdf = FPDF(format="A4")
@@ -460,19 +531,17 @@ def create_formal_pdf(q):
     return bytes(pdf.output())
 
 # ==========================================
-# 5. 메인 워크스페이스
+# 6. 메인 워크스페이스
 # ==========================================
 tabs = st.tabs(["실시간 견적 산출", "공정흐름 관리 (MES)", "납기 캘린더", "그룹 발주 관리", "시스템 설정"])
 
 # ------------------------------------------
-# TAB 1: 실시간 견적 산출 (2열 워크스페이스 구조)
+# TAB 1: 실시간 견적 산출 (2열 워크스페이스)
 # ------------------------------------------
 with tabs[0]:
     left_col, right_col = st.columns([1.1, 0.9], gap="medium")
 
-    # --- 좌측 패널: 조건 입력 및 엔지니어링 검수 ---
     with left_col:
-        # 카드 1: 발주 사양
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">1. 발주 기본 정보</div>', unsafe_allow_html=True)
             c1, c2 = st.columns(2)
@@ -484,7 +553,6 @@ with tabs[0]:
                 due_date = st.date_input("납기 요청일", value=datetime.today() + timedelta(days=12))
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # 카드 2: 도면 분석 & 입력 방식
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">2. 도면 파일 및 입력 방식</div>', unsafe_allow_html=True)
             quote_mode = st.radio("모드 선택", ["AI 비전 도면 자동 판독", "수동 직접 입력"], horizontal=True, label_visibility="collapsed")
@@ -519,7 +587,6 @@ with tabs[0]:
                 st.session_state["manual_filename"] = st.text_input("품목명 / 도면 식별 번호", value="BRACKET-M01")
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # 분석 파라미터 로드
         active_analysis = st.session_state["bg_task"].get("result")
         current_fname = st.session_state["bg_task"].get("filename", "") if quote_mode == "AI 비전 도면 자동 판독" else st.session_state.get("manual_filename", "수동품목")
 
@@ -529,7 +596,6 @@ with tabs[0]:
         ai_difficulty_factor = float(active_analysis.get("difficulty_factor", 1.0)) if active_analysis else 1.0
         ai_reasoning = active_analysis.get("reasoning", "") if active_analysis else ""
 
-        # 카드 3: 사장님 검수 시뮬레이터
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">3. 가공 조건 & 엔지니어링 미세 조정</div>', unsafe_allow_html=True)
             k1, k2 = st.columns(2)
@@ -566,9 +632,7 @@ with tabs[0]:
             order_memo = st.text_input("현장 비고 / 특이사항 메모", value=ai_reasoning)
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- 우측 패널: 실시간 원가 대시보드 & 액션 ---
     with right_col:
-        # 실시간 연산
         raw_material_weight = adj_pure_weight * (1.0 + (adj_loss_rate / 100.0))
         mat_unit_price = settings["materials"][sel_material]
         mat_total_cost = int(raw_material_weight * mat_unit_price * order_qty)
@@ -628,7 +692,6 @@ with tabs[0]:
         }
         pdf_bytes = create_formal_pdf(quote_payload)
 
-        # 원가 요약 대시보드 카드
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">견적 산출 브레이크다운</div>', unsafe_allow_html=True)
             
@@ -700,13 +763,11 @@ with tabs[1]:
     else:
         for idx, o in enumerate(filtered_orders):
             stage_name = o.get("status", "1. 견적제출")
-            stage_color = STAGE_CONFIG.get(stage_name, {}).get("color", "#64748b")
             header_title = f"[{stage_name}] {o.get('quote_no')} | {o.get('client_name')} : {o.get('filename')} ({o.get('qty')} EA) | 납기: {o.get('due_date')}"
             
             with st.expander(header_title, expanded=(current_filter != "전체")):
                 step_idx = PROCESS_STAGES.index(stage_name) if stage_name in PROCESS_STAGES else 0
                 
-                # 시각적 스텝 바
                 step_html = "<div style='display: flex; gap: 4px; margin-bottom: 12px; overflow-x: auto;'>"
                 for s_i, s_name in enumerate(PROCESS_STAGES):
                     bg = STAGE_CONFIG[s_name]['color'] if s_i <= step_idx else "#1e293b"
@@ -839,7 +900,6 @@ with tabs[3]:
             st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 그룹별 리스트
     groups = {}
     for o in orders_db:
         if o.get("group_id"):
@@ -853,10 +913,9 @@ with tabs[3]:
             st.dataframe(pd.DataFrame(sub_rows), use_container_width=True)
 
 # ------------------------------------------
-# TAB 5: 시스템 설정 & 인가 계정 관리 (계정 삭제 추가)
+# TAB 5: 시스템 설정 & 인가 계정 관리
 # ------------------------------------------
 with tabs[4]:
-    # 1. 인가 계정 관리
     st.markdown('<div class="panel-card"><div class="panel-title">사용자 계정 관리</div>', unsafe_allow_html=True)
     if st.session_state["auth_user"]["role"] != "admin":
         st.warning("계정 관리 기능은 총괄 관리자(admin) 전용입니다.")
@@ -870,7 +929,7 @@ with tabs[4]:
             new_urole = st.selectbox("권한", ["user", "admin"])
             if st.button("계정 생성", type="primary"):
                 if new_uid and new_upw:
-                    users_db[new_uid] = {"password": new_upw, "name": new_uname, "role": new_urole}
+                    users_db[new_uid] = {"password": new_upw, "name": new_uname, "role": new_urole, "last_seen_version": ""}
                     save_json(USERS_FILE, users_db)
                     st.success(f"계정 [{new_uid}] 등록 완료")
                     st.rerun()
@@ -884,7 +943,6 @@ with tabs[4]:
                 with u_row2:
                     st.caption(f"권한: `{uinfo['role']}`")
                 with u_row3:
-                    # admin 계정 및 현재 접속 중인 계정 삭제 방지 가드레일
                     if uid == "admin":
                         st.caption("시스템 마스터")
                     elif uid == st.session_state.get("auth_user_id"):
@@ -898,7 +956,6 @@ with tabs[4]:
                 st.divider()
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 2. 데이터 백업 / 복원
     st.markdown('<div class="panel-card"><div class="panel-title">데이터베이스 백업 & 복원</div>', unsafe_allow_html=True)
     bk1, bk2 = st.columns(2)
     with bk1:
@@ -921,7 +978,6 @@ with tabs[4]:
                 st.error(f"복원 오류: {str(e)}")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # 3. 기준 단가표 설정
     st.markdown('<div class="panel-card"><div class="panel-title">공급사 정보 및 기준 단가 설정</div>', unsafe_allow_html=True)
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
