@@ -25,7 +25,7 @@ SYSTEM_RELEASE_NOTES = [
         "date": "2026-10-25",
         "title": "503 트래픽 과부하 방어 3단 폴백 체인 구축",
         "details": [
-            "구글 AI 서버 503 UNAVAILABLE 대비 3단계 모델 우회(flash ➔ pro ➔ flash) 적용",
+            "구글 AI 서버 503 UNAVAILABLE 대비 3단계 모델 우회(flash ➔ pro ➔flash) 적용",
             "점진적 지수 백오프(2s ➔ 4s ➔ 6s) 대기 로직 적용으로 순간 트래픽 방어",
             "실패 시 직관적인 재시도 및 수동 모드 우회 가이드 배너 탑재"
         ]
