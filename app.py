@@ -1,17 +1,18 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from google import genai
 from google.genai import types
 import os
 import json
 import base64
+import threading
 import pandas as pd
 from fpdf import FPDF
 from datetime import datetime, timedelta
 
 # ==========================================
-# 0. 경로 및 기본 데이터베이스 설정 (클라우드/로컬 자동 호환)
+# 0. 경로 및 영구 데이터베이스 관리
 # ==========================================
-# 실행 중인 파일 기준 상대 경로로 설정하여 리눅스 클라우드에서도 정상 동작하도록 처리
 DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 SETTINGS_FILE = os.path.join(DATA_DIR, "pricing_settings.json")
 ORDERS_FILE = os.path.join(DATA_DIR, "orders_database.json")
@@ -25,12 +26,12 @@ DEFAULT_USERS = {
 
 DEFAULT_SETTINGS = {
     "company_info": {
-        "company_name": "(주)마시닝솔루션스",
+        "company_name": "Costify 가공 솔루션",
         "biz_num": "123-45-67890",
         "ceo_name": "홍길동",
         "tel": "031-123-4567",
-        "email": "quote@machiningsol.com",
-        "address": "경기도 시흥시 시화벤처로 123"
+        "email": "contact@costify.ai",
+        "address": "경기도 시흥시 시화벤처로 123 Costify 빌딩"
     },
     "materials": {
         "S45C / 탄소강": 4500,
@@ -76,9 +77,9 @@ settings = load_json(SETTINGS_FILE, DEFAULT_SETTINGS)
 orders_db = load_json(ORDERS_FILE, [])
 
 # ==========================================
-# 1. UI 테마 & 로그인 세션 관리
+# 1. UI 환경 & 로그인 세션 관리
 # ==========================================
-st.set_page_config(page_title="MACHINING MES | 초정밀 절삭가공 통합 솔루션", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="Costify | AI 절삭가공 견적 & MES 솔루션", page_icon="⚡", layout="wide")
 
 st.markdown("""
 <style>
@@ -94,65 +95,146 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# 새 창(새 탭)에서 파일을 깨끗하게 열어주는 Blob 팝업 렌더러
+def open_in_new_tab_button(file_bytes, mime_type, label="🔍 새 창에서 전체화면 보기"):
+    b64 = base64.b64encode(file_bytes).decode('utf-8')
+    js_code = f"""
+    <div style="margin: 6px 0;">
+        <button onclick="openBlob()" style="
+            background-color: #0284c7;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+        ">{label}</button>
+    </div>
+    <script>
+    function openBlob() {{
+        const b64Data = '{b64}';
+        const contentType = '{mime_type}';
+        const byteCharacters = atob(b64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {{
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }}
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], {{type: contentType}});
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank');
+    }}
+    </script>
+    """
+    components.html(js_code, height=48)
+
+# 로그인 검증
 if "auth_user" not in st.session_state:
     st.session_state["auth_user"] = None
 
 if not st.session_state["auth_user"]:
-    login_c1, login_c2, login_c3 = st.columns([1, 1.2, 1])
+    _, login_c2, _ = st.columns([1, 1.2, 1])
     with login_c2:
         st.markdown("<br><br>", unsafe_allow_html=True)
-        st.title("🔒 MACHINING MES 포털")
-        st.caption("사전 등록된 공장 및 인가된 담당자 전용 시스템입니다.")
+        st.title("⚡ Costify 포털 로그인")
+        st.caption("AI 가공 견적 자동 산출 및 공정 관리 시스템")
         
         with st.form("login_form"):
-            in_id = st.text_input("아이디 (User ID)")
-            in_pw = st.text_input("비밀번호 (Password)", type="password")
+            in_id = st.text_input("아이디 (ID)")
+            in_pw = st.text_input("비밀번호", type="password")
             submit_login = st.form_submit_button("시스템 접속", use_container_width=True, type="primary")
             
             if submit_login:
                 if in_id in users_db and users_db[in_id]["password"] == in_pw:
                     st.session_state["auth_user"] = users_db[in_id]
                     st.session_state["auth_user_id"] = in_id
-                    st.success(f"{users_db[in_id]['name']}님 환영합니다.")
                     st.rerun()
                 else:
-                    st.error("아이디 또는 비밀번호가 일치하지 않습니다.")
+                    st.error("계정 정보가 올바르지 않습니다.")
         st.info("💡 초기 관리자 계정: `admin` / 비밀번호: `admin1234!`")
     st.stop()
 
 # ==========================================
-# 2. 상단 헤더 & 사이드바
+# 2. 백그라운드 AI 분석 스레드 관리
 # ==========================================
+if "bg_task" not in st.session_state:
+    st.session_state["bg_task"] = {
+        "status": "idle",  # idle, running, completed, error
+        "result": None,
+        "error": None,
+        "filename": ""
+    }
+
+def bg_analysis_worker(api_key, model_name, file_bytes, mime_type, filename, task_store):
+    try:
+        client = genai.Client(api_key=api_key.strip())
+        doc_part = types.Part.from_bytes(data=file_bytes, mime_type=mime_type)
+        prompt = """
+        당신은 20년 경력의 베테랑 절삭가공(MCT/CNC) 공장장입니다.
+        업로드된 도면을 분석하여 다음 항목을 반드시 순수한 JSON 형식으로만 추출하세요.
+        {
+            "material_type": "재질 (도면에 기재된 규격, 예: AL6061, SUS304, S45C, SS400 등)",
+            "estimated_weight_kg": 숫자 (원소재 예상 중량 kg, 소수점 둘째자리),
+            "estimated_machining_hours": 숫자 (순수 절삭 가공 소요 시간, 소수점 둘째자리),
+            "recommended_machine": "추천 설비 (3축 머시닝센터(MCT), 5축 머시닝센터(MCT), CNC 복합선반 중 택 1)",
+            "holes_count": 숫자 (가공 홀 총 개수),
+            "difficulty": "가공 난이도 (상, 중, 하)",
+            "reasoning": "산출 근거 (2줄 요약)"
+        }
+        """
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[doc_part, prompt],
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
+        clean = response.text.strip().replace("```json", "").replace("```", "").strip()
+        task_store["result"] = json.loads(clean)
+        task_store["filename"] = filename
+        task_store["status"] = "completed"
+    except Exception as e:
+        task_store["error"] = str(e)
+        task_store["status"] = "error"
+
+# 상단 헤더
 head_l, head_r = st.columns([3, 1])
 with head_l:
-    st.title("⚙️ MACHINING MES | 견적·공정 관리 시스템")
-    st.caption(f"접속자: **{st.session_state['auth_user']['name']}** ({st.session_state['auth_user']['role']}) | 사업장: {settings['company_info']['company_name']}")
+    st.title("⚡ Costify | AI 가공 견적 & 공정 관리")
+    st.caption(f"접속자: **{st.session_state['auth_user']['name']}** ({st.session_state['auth_user']['role']}) | 운영: {settings['company_info']['company_name']}")
 with head_r:
     if st.button("🚪 로그아웃", use_container_width=True):
         st.session_state["auth_user"] = None
         st.rerun()
 
+# 사이드바 설정
 with st.sidebar:
-    st.header("🔑 AI 비전 엔진 설정")
-    # Streamlit Cloud의 Secrets에 등록된 키가 있으면 자동 주입
+    st.markdown("### ⚡ Costify 엔진")
     default_api_key = st.secrets.get("GEMINI_API_KEY", "") if hasattr(st, "secrets") else ""
-    api_key = st.text_input("Gemini API Key", value=default_api_key, type="password", help="도면 Vision 판독용 API Key입니다.")
+    api_key = st.text_input("Gemini API Key", value=default_api_key, type="password", help="Vision 분석용 API Key입니다.")
     selected_model = st.selectbox("AI 모델", ["gemini-3.8-flash"], index=0)
     st.divider()
-    st.caption(f"기준 셋업비: **{settings['default_setup_fee']:,} 원**")
-    st.caption(f"표준 마진율: **{settings['default_margin_rate']} %**")
+    st.caption(f"- 기본 셋업비: **{settings['default_setup_fee']:,} 원**")
+    st.caption(f"- 표준 마진율: **{settings['default_margin_rate']} %**")
+
+# 백그라운드 작업 상태 표시 배너
+if st.session_state["bg_task"]["status"] == "running":
+    st.info("🔄 **[백그라운드 실행 중]** 도면을 분석하고 있습니다... 다른 탭에서 작업을 계속 진행하셔도 됩니다.")
+elif st.session_state["bg_task"]["status"] == "completed":
+    st.success("✅ **[분석 완료]** 백그라운드 도면 분석이 완료되었습니다. 아래 견적 상세를 확인하세요.")
+elif st.session_state["bg_task"]["status"] == "error":
+    st.error(f"❌ 분석 실패: {st.session_state['bg_task']['error']}")
 
 # ==========================================
-# 3. PDF 견적서 생성 유틸리티 (윈도우/리눅스 폰트 동시 지원)
+# 3. PDF 견적서 생성 유틸리티
 # ==========================================
 def create_formal_pdf(q):
     pdf = FPDF(format="A4")
     pdf.add_page()
     
-    # 윈도우(Malgun) 및 리눅스 클라우드(NanumGothic) 폰트 자동 탐색
     font_candidates = [
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",  # 리눅스 클라우드 표준 경로
-        r"C:\Windows\Fonts\malgun.ttf",                     # 윈도우 로컬 경로
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+        r"C:\Windows\Fonts\malgun.ttf",
         os.path.join(DATA_DIR, "NanumGothic.ttf")
     ]
     bold_candidates = [
@@ -172,7 +254,7 @@ def create_formal_pdf(q):
         main_font, bold_font = "helvetica", "helvetica"
 
     pdf.set_font(bold_font, size=18)
-    pdf.cell(0, 12, "가 공 견 적 서 (QUOTATION)", ln=True, align="C")
+    pdf.cell(0, 12, "Costify 표준 가공 견적서", ln=True, align="C")
     pdf.ln(3)
 
     pdf.set_font(main_font, size=9)
@@ -193,7 +275,7 @@ def create_formal_pdf(q):
     pdf.set_x(12)
     pdf.cell(86, 5, f"품명(도면): {q.get('filename', '도면')}", ln=True)
     pdf.set_x(12)
-    pdf.cell(86, 5, f"현재상태: {q.get('status', '1. 견적제출')}", ln=True)
+    pdf.cell(86, 5, f"진행상태: {q.get('status', '1. 견적제출')}", ln=True)
 
     c_info = settings["company_info"]
     pdf.rect(105, y_pos, 95, 30)
@@ -210,14 +292,14 @@ def create_formal_pdf(q):
 
     pdf.set_y(y_pos + 34)
     pdf.set_font(bold_font, size=11)
-    pdf.cell(0, 9, f"견적 공급가액 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)", border=1, ln=True, align="C")
+    pdf.cell(0, 9, f"견적 공급가 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)", border=1, ln=True, align="C")
     pdf.ln(3)
 
     pdf.set_font(bold_font, size=8)
     pdf.cell(38, 7, "품명 및 사양", border=1, align="C")
     pdf.cell(16, 7, "수량", border=1, align="C")
     pdf.cell(34, 7, "재질 / 중량", border=1, align="C")
-    pdf.cell(36, 7, "설비 / 후처리", border=1, align="C")
+    pdf.cell(36, 7, "적용설비 / 후처리", border=1, align="C")
     pdf.cell(32, 7, "개당 단가", border=1, align="C")
     pdf.cell(34, 7, "합계 공급가", border=1, align="C")
     pdf.ln()
@@ -232,7 +314,7 @@ def create_formal_pdf(q):
     pdf.ln(10)
 
     pdf.set_font(bold_font, size=9)
-    pdf.cell(0, 6, "[ 세부 원가 산출 명세 ]", ln=True)
+    pdf.cell(0, 6, "[ Costify 정밀 원가 산출 명세 ]", ln=True)
     pdf.set_font(main_font, size=8)
     pdf.cell(0, 5, f"- 재료비 합계: {q.get('material_cost_total', 0):,} 원 (개당 {q.get('weight', 0)}kg x {q.get('material_unit_price', 0):,}원 x {q.get('qty', 1)}개)", ln=True)
     pdf.cell(0, 5, f"- 가공비 합계: {q.get('machining_cost_total', 0):,} 원 (가공 {q.get('hours', 0)}h x {q.get('machine_hourly_rate', 0):,}원 x {q.get('qty', 1)}개 x 공차할증 {q.get('tolerance_factor', 'x1.0')})", ln=True)
@@ -243,30 +325,26 @@ def create_formal_pdf(q):
     if q.get('memo'):
         pdf.ln(2)
         pdf.set_font(bold_font, size=8)
-        pdf.cell(0, 5, f"[ 현장 특이사항 및 메모 ]: {q.get('memo')}", ln=True)
+        pdf.cell(0, 5, f"[ 현장 비고/엔지니어링 메모 ]: {q.get('memo')}", ln=True)
 
     return bytes(pdf.output())
 
-def get_pdf_display_html(pdf_bytes, height=500):
-    b64 = base64.b64encode(pdf_bytes).decode('utf-8')
-    return f'<iframe src="data:application/pdf;base64,{b64}" width="100%" height="{height}px" type="application/pdf" style="border: 1px solid #334155; border-radius: 6px;"></iframe>'
-
 # ==========================================
-# 4. 메인 탭 네비게이션
+# 4. 메인 워크스페이스 탭 구성
 # ==========================================
 tab_quote, tab_process, tab_calendar, tab_history, tab_settings = st.tabs([
-    "🚀 견적 산출 (AI / 수동)",
+    "🚀 실시간 견적 산출",
     "🏭 공정흐름 관리 (MES)",
     "📅 납기 캘린더",
     "📦 묶음 발주 & 이력",
-    "⚙️ 단가 및 계정 관리"
+    "⚙️ 단가 및 시스템 관리"
 ])
 
 # ------------------------------------------
-# TAB 1: 견적 산출
+# TAB 1: 실시간 견적 산출 (비동기 지원)
 # ------------------------------------------
 with tab_quote:
-    st.markdown("#### 1. 기본 발주 사양 입력")
+    st.markdown("#### 1. 수주 기본 사양 등록")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         client_name = st.text_input("고객사(발주처)", value="(주)한국정밀")
@@ -277,83 +355,62 @@ with tab_quote:
     with c4:
         due_date = st.date_input("납기 요청일", value=datetime.today() + timedelta(days=12))
 
-    quote_mode = st.radio("견적 산출 방식 선택", ["🤖 AI 도면 비전 자동 판독", "✍️ 엔지니어 직접 수동 입력"], horizontal=True)
-
-    parsed_weight = 0.5
-    parsed_hours = 0.5
-    parsed_holes = 0
-    parsed_diff = "중"
-    parsed_reasoning = "수동 산출 모드"
+    quote_mode = st.radio("견적 모드 선택", ["🤖 AI 도면 비전 자동 판독", "✍️ 엔지니어 직접 수동 입력"], horizontal=True)
 
     uploaded_file = None
     if quote_mode == "🤖 AI 도면 비전 자동 판독":
-        col_up, col_prev = st.columns([1, 1])
+        col_up, col_btn = st.columns([2, 1])
         with col_up:
-            uploaded_file = st.file_uploader("가공 도면 업로드 (PDF, PNG, JPG, JPEG)", type=["pdf", "png", "jpg", "jpeg"])
-            ai_btn = st.button("⚡ AI 도면 판독 실행", type="primary", use_container_width=True)
-            
-            if uploaded_file:
-                with st.expander("🔍 [대형 화면] 업로드 도면 정밀 확대 보기"):
-                    file_ext = uploaded_file.name.split(".")[-1].lower()
-                    if file_ext in ["png", "jpg", "jpeg"]:
-                        st.image(uploaded_file, use_container_width=True)
-                    elif file_ext == "pdf":
-                        st.markdown(get_pdf_display_html(uploaded_file.getvalue(), height=750), unsafe_allow_html=True)
+            uploaded_file = st.file_uploader("도면 업로드 (PDF, PNG, JPG, JPEG)", type=["pdf", "png", "jpg", "jpeg"])
+        
+        with col_btn:
+            st.write("")
+            st.write("")
+            start_ai = st.button("⚡ AI 분석 시작 (백그라운드)", type="primary", use_container_width=True)
 
-        with col_prev:
-            if uploaded_file:
-                st.caption("📄 원본 도면 요약 프리뷰")
-                file_ext = uploaded_file.name.split(".")[-1].lower()
-                if file_ext in ["png", "jpg", "jpeg"]:
-                    st.image(uploaded_file, use_container_width=True)
-                elif file_ext == "pdf":
-                    st.markdown(get_pdf_display_html(uploaded_file.getvalue(), height=260), unsafe_allow_html=True)
+        if uploaded_file:
+            # 크롬 차단 문제 해결: 새 창에서 도면 전체화면 띄우기 버튼
+            file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
+            open_in_new_tab_button(uploaded_file.getvalue(), file_mime, label="🔍 [새 창] 업로드 도면 전체화면 확인")
 
-        if ai_btn and uploaded_file and api_key:
-            with st.spinner("Gemini 3.8 Flash가 형상, 가공 여유, 툴패스를 정밀 계산 중입니다..."):
-                try:
-                    client = genai.Client(api_key=api_key.strip())
-                    mime_type = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
-                    doc_part = types.Part.from_bytes(data=uploaded_file.getvalue(), mime_type=mime_type)
-                    
-                    prompt = """
-                    당신은 20년 경력의 절삭가공(MCT/CNC) 공장장입니다.
-                    업로드된 도면을 분석하여 다음 항목을 JSON으로만 추출하세요.
-                    {
-                        "material_type": "재질 (예: AL6061, SUS304, S45C, SS400 등)",
-                        "estimated_weight_kg": 숫자 (개당 예상 소재 중량 kg, 소수점 둘째자리),
-                        "estimated_machining_hours": 숫자 (개당 순수 가공 소요 시간, 소수점 둘째자리),
-                        "recommended_machine": "추천 설비 (3축 머시닝센터(MCT), 5축 머시닝센터(MCT), CNC 복합선반 중 1개)",
-                        "holes_count": 숫자 (홀 총 개수),
-                        "difficulty": "가공 난이도 (상, 중, 하)",
-                        "reasoning": "산출 근거 (2줄 요약)"
-                    }
-                    """
-                    resp = client.models.generate_content(
-                        model=selected_model,
-                        contents=[doc_part, prompt],
-                        config=types.GenerateContentConfig(response_mime_type="application/json")
+        # 백그라운드 분석 스레드 트리거
+        if start_ai and uploaded_file and api_key:
+            if st.session_state["bg_task"]["status"] != "running":
+                st.session_state["bg_task"]["status"] = "running"
+                st.session_state["bg_task"]["result"] = None
+                st.session_state["bg_task"]["error"] = None
+                
+                t = threading.Thread(
+                    target=bg_analysis_worker,
+                    args=(
+                        api_key,
+                        selected_model,
+                        uploaded_file.getvalue(),
+                        file_mime,
+                        uploaded_file.name,
+                        st.session_state["bg_task"]
                     )
-                    clean = resp.text.strip().replace("```json", "").replace("```", "").strip()
-                    st.session_state["quote_ai_cache"] = json.loads(clean)
-                    st.session_state["quote_filename"] = uploaded_file.name
-                    st.success("AI 도면 판독이 완료되었습니다.")
-                except Exception as e:
-                    st.error(f"판독 에러: {str(e)}")
+                )
+                t.daemon = True
+                t.start()
+                st.rerun()
 
-        if "quote_ai_cache" in st.session_state:
-            cached = st.session_state["quote_ai_cache"]
-            parsed_weight = float(cached.get("estimated_weight_kg", 0.5))
-            parsed_hours = float(cached.get("estimated_machining_hours", 0.5))
-            parsed_holes = cached.get("holes_count", 0)
-            parsed_diff = cached.get("difficulty", "중")
-            parsed_reasoning = cached.get("reasoning", "")
     else:
-        st.session_state["quote_filename"] = st.text_input("품목명 / 도면 품번", value="BRACKET-M01")
+        st.session_state["manual_filename"] = st.text_input("품목명 / 도면 품번", value="BRACKET-M01")
+
+    # 결과 및 파라미터 로딩
+    active_analysis = st.session_state["bg_task"].get("result")
+    current_fname = st.session_state["bg_task"].get("filename", "") if quote_mode == "🤖 AI 도면 비전 자동 판독" else st.session_state.get("manual_filename", "수동품목")
+
+    p_weight = float(active_analysis.get("estimated_weight_kg", 0.5)) if active_analysis else 0.5
+    p_hours = float(active_analysis.get("estimated_machining_hours", 0.5)) if active_analysis else 0.5
+    p_holes = active_analysis.get("holes_count", 0) if active_analysis else 0
+    p_diff = active_analysis.get("difficulty", "중") if active_analysis else "중"
+    p_reasoning = active_analysis.get("reasoning", "") if active_analysis else ""
 
     st.divider()
     st.markdown("#### 2. 가공 조건 및 단가 산정")
-    
+
     sc1, sc2, sc3, sc4 = st.columns(4)
     with sc1:
         mat_keys = list(settings["materials"].keys())
@@ -369,12 +426,13 @@ with tab_quote:
 
     adj1, adj2, adj3 = st.columns([1, 1, 2])
     with adj1:
-        final_weight = st.number_input("개당 소재 중량 (kg)", value=float(parsed_weight), step=0.05, format="%.2f")
+        final_weight = st.number_input("개당 소재 중량 (kg)", value=p_weight, step=0.05, format="%.2f")
     with adj2:
-        final_hours = st.number_input("개당 가공 소요시간 (h)", value=float(parsed_hours), step=0.05, format="%.2f")
+        final_hours = st.number_input("개당 가공 소요시간 (h)", value=p_hours, step=0.05, format="%.2f")
     with adj3:
-        order_memo = st.text_input("현장 특이사항 / 도면 비고 메모", value=parsed_reasoning)
+        order_memo = st.text_input("현장 특이사항 / 도면 비고 메모", value=p_reasoning)
 
+    # 원가 계산
     tol_factor = 1.0
     if "정밀 공차" in tol_grade: tol_factor = 1.2
     elif "초정밀 공차" in tol_grade: tol_factor = 1.5
@@ -405,7 +463,7 @@ with tab_quote:
         "due_date": due_date.strftime("%Y-%m-%d"),
         "client_name": client_name,
         "client_manager": client_manager,
-        "filename": st.session_state.get("quote_filename", "수동품목"),
+        "filename": current_fname if current_fname else "도면",
         "qty": order_qty,
         "material": sel_material,
         "material_unit_price": mat_unit,
@@ -424,9 +482,9 @@ with tab_quote:
         "unit_price": unit_price,
         "weight": final_weight,
         "hours": final_hours,
-        "holes": parsed_holes,
-        "difficulty": parsed_diff,
-        "reasoning": parsed_reasoning,
+        "holes": p_holes,
+        "difficulty": p_diff,
+        "reasoning": p_reasoning,
         "memo": order_memo
     }
 
@@ -435,39 +493,38 @@ with tab_quote:
     st.divider()
     res1, res2 = st.columns([1, 1])
     with res1:
-        st.markdown("#### 📊 최종 견적 결과 지표")
+        st.markdown("#### 📊 최종 견적 요약")
         m1, m2 = st.columns(2)
         with m1:
-            st.markdown(f"<div class='metric-card'><div class='metric-label'>개당 공급단가 (VAT별도)</div><div class='metric-value'>{unit_price:,} 원</div></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='metric-card'><div class='metric-label'>개당 납품단가 (VAT별도)</div><div class='metric-value'>{unit_price:,} 원</div></div>", unsafe_allow_html=True)
         with m2:
-            st.markdown(f"<div class='metric-card'><div class='metric-label'>총 견적 금액 ({order_qty}개)</div><div class='metric-value' style='color:#38bdf8;'>{total_supply:,} 원</div></div>", unsafe_allow_html=True)
-        
-        st.write(f"- 원재료비 합계: **{mat_total:,} 원** | 순수가공비: **{mac_total:,} 원**")
-        st.write(f"- 셋업비(초도 세팅): **{setup_fee:,} 원** | 후처리비: **{surf_total:,} 원**")
-        
+            st.markdown(f"<div class='metric-card'><div class='metric-label'>총 공급가액 ({order_qty}개)</div><div class='metric-value' style='color:#38bdf8;'>{total_supply:,} 원</div></div>", unsafe_allow_html=True)
+
+        st.write(f"- 원소재비 합계: **{mat_total:,} 원** | 순수가공비: **{mac_total:,} 원**")
+        st.write(f"- 셋업 공임: **{setup_fee:,} 원** | 표면처리비: **{surf_total:,} 원**")
+
         b1, b2 = st.columns(2)
         with b1:
-            st.download_button("📥 정식 견적서 PDF 다운로드", data=pdf_bytes, file_name=f"{quote_no}_{client_name}.pdf", mime="application/pdf", type="primary", use_container_width=True)
+            st.download_button("📥 견적서 PDF 다운로드", data=pdf_bytes, file_name=f"{quote_no}_{client_name}.pdf", mime="application/pdf", type="primary", use_container_width=True)
         with b2:
-            if st.button("💾 발주/공정 DB에 즉시 등록", use_container_width=True):
+            if st.button("💾 Costify 시스템에 영구 저장", use_container_width=True):
                 orders_db.insert(0, quote_payload)
                 save_json(ORDERS_FILE, orders_db)
-                st.success(f"견적 [{quote_no}] 건이 공정 관리 DB에 성공적으로 등록되었습니다!")
+                st.success(f"견적 [{quote_no}] 건이 저장되었습니다.")
                 st.rerun()
 
     with res2:
-        st.markdown("#### 🖨️ 견적서 미리보기")
-        st.markdown(get_pdf_display_html(pdf_bytes, height=360), unsafe_allow_html=True)
-        with st.expander("🔍 [대형 화면] 견적서 풀스크린 정밀 확인"):
-            st.markdown(get_pdf_display_html(pdf_bytes, height=800), unsafe_allow_html=True)
+        st.markdown("#### 🖨️ 견적서 새 창 미리보기")
+        st.caption("※ 아래 버튼을 누르면 크롬 차단 없이 깨끗한 새 탭에서 즉시 열람 및 인쇄가 가능합니다.")
+        open_in_new_tab_button(pdf_bytes, "application/pdf", label="🔍 [새 창] Costify 견적서 전체화면 열기")
 
 # ------------------------------------------
-# TAB 2: 공정흐름 관리
+# TAB 2: 공정흐름 관리 (MES 파이프라인)
 # ------------------------------------------
 with tab_process:
-    st.subheader("🏭 실시간 가공 공정흐름 트래킹")
+    st.subheader("🏭 Costify 공정 흐름 실시간 트래킹")
     if not orders_db:
-        st.info("등록된 수주 건이 없습니다.")
+        st.info("등록된 가공 수주 건이 없습니다.")
     else:
         stat_cols = st.columns(len(PROCESS_STAGES))
         for idx, stage in enumerate(PROCESS_STAGES):
@@ -481,7 +538,7 @@ with tab_process:
                 row1, row2, row3 = st.columns([1.5, 2.5, 1])
                 with row1:
                     cur_idx = PROCESS_STAGES.index(o.get("status", PROCESS_STAGES[0])) if o.get("status") in PROCESS_STAGES else 0
-                    new_status = st.selectbox("현재 가공 단계", PROCESS_STAGES, index=cur_idx, key=f"status_{o['id']}")
+                    new_status = st.selectbox("공정 단계", PROCESS_STAGES, index=cur_idx, key=f"status_{o['id']}")
                 with row2:
                     new_memo = st.text_input("현장 메모", value=o.get("memo", ""), key=f"memo_{o['id']}")
                 with row3:
@@ -510,7 +567,7 @@ with tab_calendar:
                 due_dt = datetime.strptime(due_str, "%Y-%m-%d").date()
                 diff = (due_dt - today).days
                 if diff < 0: d_day_str = f"⚠️ {abs(diff)}일 지연"
-                elif diff == 0: d_day_str = "🔥 오늘 납기"
+                elif diff == 0: d_day_str = "🔥 오늘 납기 (D-Day)"
                 else: d_day_str = f"D-{diff}"
             except Exception:
                 d_day_str = "-"
@@ -533,11 +590,11 @@ with tab_calendar:
 with tab_history:
     st.subheader("📦 다품종 수주 묶음(그룹화) 및 과거 이력 관리")
     if not orders_db:
-        st.info("데이터베이스가 비어 있습니다.")
+        st.info("등록된 견적 이력이 없습니다.")
     else:
         grp_c1, grp_c2 = st.columns([2, 1])
         with grp_c1:
-            group_title_input = st.text_input("새 묶음 프로젝트명", placeholder="예: 반도체 라인 지그 4종 1차 발주")
+            group_title_input = st.text_input("새 묶음 프로젝트명", placeholder="예: 2차 라인 반도체 지그 4종 묶음")
         with grp_c2:
             st.write("")
             st.write("")
@@ -578,10 +635,39 @@ with tab_history:
                 st.dataframe(pd.DataFrame(sub_rows), use_container_width=True)
 
 # ------------------------------------------
-# TAB 5: 기준 단가 및 인가 계정 관리
+# TAB 5: 기준 단가 & 영구 데이터 관리
 # ------------------------------------------
 with tab_settings:
-    st.subheader("⚙️ 공장 기준 단가 및 사용자 계정 관리")
+    st.subheader("⚙️ 단가표 및 Costify 데이터베이스 관리")
+    
+    # 1. 영구 데이터 백업 & 복원 도구
+    st.markdown("#### 1. 데이터 영구 보관 & 백업/복원")
+    b_col1, b_col2 = st.columns(2)
+    with b_col1:
+        st.caption("현재 시스템의 모든 수주/견적 내역을 JSON 파일로 백업합니다.")
+        st.download_button(
+            "💾 전체 수주 DB 백업 다운로드",
+            data=json.dumps(orders_db, ensure_ascii=False, indent=2),
+            file_name=f"costify_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    with b_col2:
+        st.caption("기존 백업 파일을 업로드하여 시스템에 즉시 복원합니다.")
+        restore_file = st.file_uploader("백업 파일(.json) 선택", type=["json"])
+        if restore_file:
+            if st.button("📂 데이터 복원 실행", use_container_width=True):
+                try:
+                    restored_data = json.load(restore_file)
+                    save_json(ORDERS_FILE, restored_data)
+                    st.success("데이터베이스가 성공적으로 복원되었습니다.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"복원 실패: {str(e)}")
+
+    st.divider()
+    # 2. 계정 관리
+    st.markdown("#### 2. 사용자 계정 관리 (회원가입 차단)")
     if st.session_state["auth_user"]["role"] != "admin":
         st.warning("계정 관리 기능은 관리자(admin) 전용입니다.")
     else:
@@ -603,6 +689,8 @@ with tab_settings:
             st.dataframe(pd.DataFrame([{"아이디": k, "이름": v["name"], "권한": v["role"]} for k, v in users_db.items()]), use_container_width=True)
 
     st.divider()
+    # 3. 공급사 정보 & 기준 단가표
+    st.markdown("#### 3. 공급사 정보 및 공정별 기준 단가표")
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
         c_name = st.text_input("상호명", value=settings["company_info"]["company_name"])
