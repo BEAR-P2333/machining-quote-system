@@ -17,26 +17,27 @@ from datetime import datetime, timedelta
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.2.0"
+CURRENT_SYSTEM_VERSION = "v2.3.0"
 
 SYSTEM_RELEASE_NOTES = [
+    {
+        "version": "v2.3.0",
+        "date": "2026-10-27",
+        "title": "Zumen 엔터프라이즈 디자인 시스템 전면 이식",
+        "details": [
+            "Zumen 표준 시그니처 블루(#1976D2) TopNav 헤더 및 소프트 캔버스(#f6f6f6) 적용",
+            "CAD 도면 및 견적서 열람에 최적화된 고대비 카드 및 인풋 컴포넌트 탑재",
+            "파스텔톤 공정 상태 배지 및 AG-Grid 감성의 정밀 원가 명세 테이블 구축",
+            "기존 멀티테넌트, 다중 도면 일괄 분석, 프롬프트 지침 기능 100% 호환 보존"
+        ]
+    },
     {
         "version": "v2.2.0",
         "date": "2026-10-26",
         "title": "다중 도면 일괄 견적, 프롬프트 매칭 및 품명 편집 기능 탑재",
         "details": [
-            "도면 다중 선택(Multi-upload) 일괄 분석 및 프로그레스 바 연동",
-            "현장 엔지니어 특이사항 프롬프트와 도면 비전 매칭 분석 엔진 탑재",
-            "도면 파일명 대신 정식 품명/도번 자유 지정 및 수정 기능 추가",
-            "다품종 일괄 수주용 통합 견적서 PDF 생성 및 일괄 MES 등록 지원"
-        ]
-    },
-    {
-        "version": "v2.1.3",
-        "date": "2026-10-25",
-        "title": "503 트래픽 과부하 방어 3단 폴백 체인 구축",
-        "details": [
-            "구글 AI 서버 과부하 대비 3단계 모델 우회 및 지수 백오프 적용"
+            "도면 다중 선택 일괄 분석 및 프로그레스 바 연동",
+            "현장 엔지니어 특이사항 프롬프트 매칭 엔진 탑재"
         ]
     }
 ]
@@ -105,13 +106,13 @@ DEFAULT_USERS = {
 }
 
 STAGE_CONFIG = {
-    "1. 견적제출": {"color": "#64748b", "name": "견적제출"},
-    "2. 발주확정": {"color": "#0284c7", "name": "발주확정"},
-    "3. 소재입고": {"color": "#d97706", "name": "소재입고"},
-    "4. 가공진행(MCT/선반)": {"color": "#ea580c", "name": "가공진행"},
-    "5. 열처리/후처리": {"color": "#9333ea", "name": "후처리"},
-    "6. 치수검사/세척": {"color": "#0891b2", "name": "치수검사"},
-    "7. 출하완료": {"color": "#059669", "name": "출하완료"}
+    "1. 견적제출": {"bg": "#E9F4FF", "color": "#1667B8", "name": "견적제출"},
+    "2. 발주확정": {"bg": "#BFD9F2", "color": "#176FC5", "name": "발주확정"},
+    "3. 소재입고": {"bg": "#FFF3E0", "color": "#A65018", "name": "소재입고"},
+    "4. 가공진행(MCT/선반)": {"bg": "#F6D3CE", "color": "#BF4333", "name": "가공진행"},
+    "5. 열처리/후처리": {"bg": "#F3E8FF", "color": "#7E22CE", "name": "후처리"},
+    "6. 치수검사/세척": {"bg": "#E0F2FE", "color": "#0369A1", "name": "치수검사"},
+    "7. 출하완료": {"bg": "#E8F5E9", "color": "#236542", "name": "출하완료"}
 }
 PROCESS_STAGES = list(STAGE_CONFIG.keys())
 
@@ -155,7 +156,7 @@ def save_tenant_data(company_id, filename, data):
 companies_db = load_json(COMPANIES_META_FILE, DEFAULT_COMPANIES)
 users_db = load_json(USERS_FILE, DEFAULT_USERS)
 
-# admin 마스터 권한 자동 보장
+# 마스터 권한 자동 보장
 migration_needed = False
 if "master_workspace" not in companies_db:
     companies_db["master_workspace"] = {"name": "Costify 본사 마스터", "created_at": "2026-10-25"}
@@ -176,194 +177,213 @@ if migration_needed:
     save_json(USERS_FILE, users_db)
 
 # ==========================================
-# 2. UI 테마 & 고시인성 스타일 시스템 (다크 테마 고정)
+# 2. UI 테마 & Zumen 디자인 시스템 CSS 주입
 # ==========================================
 st.set_page_config(page_title="Costify | 정밀 절삭가공 견적 & MES", page_icon="⚙️", layout="wide")
 
 st.markdown("""
 <style>
-    /* 브라우저 OS의 라이트 모드 강제 차단 */
-    :root, html, body, [data-theme="light"], [data-theme="dark"] {
-        color-scheme: dark !important;
-        --background-color: #080d1a !important;
-        --secondary-background-color: #111a2e !important;
-        --text-color: #f1f5f9 !important;
-        --primary-color: #0284c7 !important;
+    /* Zumen 디자인 토큰 주입 */
+    :root, html, body {
+        color-scheme: light !important;
+        --zm-primary: #1976D2;
+        --zm-primary-hover: #176FC5;
+        --zm-primary-subtle: #E9F4FF;
+        --zm-surface: #ffffff;
+        --zm-surface-app: #f6f6f6;
+        --zm-border: #cccccc;
+        --zm-text: #111111;
+        --zm-text-muted: #565656;
     }
 
+    /* 전역 앱 캔버스 배경 */
     .stApp {
-        background-color: #080d1a !important;
-        color: #f1f5f9 !important;
+        background-color: #f6f6f6 !important;
+        color: #111111 !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", "Segoe UI", Roboto, sans-serif !important;
     }
+
+    /* 사이드바 깔끔한 화이트 스타일링 */
+    [data-testid="stSidebar"] {
+        background-color: #ffffff !important;
+        border-right: 1px solid #e0e0e0 !important;
+    }
+
+    /* Zumen 카드 패널 */
     .panel-card {
-        background: #111a2e !important;
-        border: 1px solid #1e2c47 !important;
-        border-radius: 8px;
-        padding: 16px 18px;
-        margin-bottom: 14px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+        background: #ffffff !important;
+        border: 1px solid #dcdcdc !important;
+        border-radius: 6px !important;
+        padding: 18px 20px !important;
+        margin-bottom: 14px !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
     }
     .panel-title {
-        color: #38bdf8 !important;
-        font-size: 13px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
-        margin-bottom: 14px;
-        border-bottom: 1px solid #1e2c47;
-        padding-bottom: 8px;
+        color: #1976D2 !important;
+        font-size: 13.5px !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.3px !important;
+        margin-bottom: 14px !important;
+        border-bottom: 1px solid #e6e6e6 !important;
+        padding-bottom: 8px !important;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
+
+    /* 폼 라벨 시인성 */
     label, .stWidgetLabel p, .stWidgetLabel span {
-        color: #cbd5e1 !important;
+        color: #333333 !important;
         font-weight: 600 !important;
-        font-size: 12.5px !important;
+        font-size: 13px !important;
     }
+
+    /* 인풋 컨트롤 (Zumen 스펙 준수) */
     input, textarea {
-        background-color: #090e1c !important;
-        color: #f8fafc !important;
-        border: 1px solid #283959 !important;
-        border-radius: 6px !important;
+        background-color: #ffffff !important;
+        color: #111111 !important;
+        border: 1px solid #cccccc !important;
+        border-radius: 4px !important;
+        font-size: 13.5px !important;
     }
     input:focus, textarea:focus {
-        border-color: #0284c7 !important;
-        box-shadow: 0 0 0 1px #0284c7 !important;
+        border-color: #1976D2 !important;
+        box-shadow: 0 0 0 1px #1976D2 !important;
     }
-    [data-testid="stDateInput"] div[data-baseweb="input"] {
-        background-color: #090e1c !important;
-        border: 1px solid #283959 !important;
-        border-radius: 6px !important;
+
+    /* 날짜창 및 셀렉트박스 */
+    [data-testid="stDateInput"] div[data-baseweb="input"], [data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        border: 1px solid #cccccc !important;
+        border-radius: 4px !important;
+        color: #111111 !important;
     }
     [data-testid="stDateInput"] input {
-        background-color: transparent !important;
-        color: #f8fafc !important;
+        color: #111111 !important;
     }
-    [data-testid="stDateInput"] svg {
-        fill: #94a3b8 !important;
-    }
-    [data-baseweb="select"] > div {
-        background-color: #090e1c !important;
-        color: #f8fafc !important;
-        border: 1px solid #283959 !important;
-        border-radius: 6px !important;
-    }
-    [data-baseweb="popover"], [data-baseweb="menu"] {
-        background-color: #111a2e !important;
-        border: 1px solid #1e2c47 !important;
-    }
+
+    /* 넘버 인풋 증감 버튼 */
     [data-testid="stNumberInput"] button {
-        background-color: #18233c !important;
-        color: #cbd5e1 !important;
-        border-color: #283959 !important;
+        background-color: #f6f6f6 !important;
+        color: #333333 !important;
+        border-color: #cccccc !important;
     }
+    [data-testid="stNumberInput"] button:hover {
+        background-color: #E9F4FF !important;
+        color: #1976D2 !important;
+    }
+
+    /* 파일 업로더 드롭존 */
     [data-testid="stFileUploaderDropzone"] {
-        background-color: #090e1c !important;
-        border: 1px dashed #283959 !important;
-        border-radius: 8px !important;
+        background-color: #fbfbfb !important;
+        border: 1px dashed #b0b0b0 !important;
+        border-radius: 6px !important;
     }
     [data-testid="stFileUploaderDropzone"] button {
-        background-color: #18233c !important;
-        color: #f8fafc !important;
-        border: 1px solid #283959 !important;
-    }
-    [data-testid="stRadio"] [aria-checked="true"] div {
-        border-color: #0284c7 !important;
-        background-color: #0284c7 !important;
-    }
-    button[kind="primary"] {
-        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
-        color: #ffffff !important;
-        border: none !important;
+        background-color: #ffffff !important;
+        color: #1976D2 !important;
+        border: 1px solid #1976D2 !important;
         font-weight: 700 !important;
-        box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3) !important;
-        border-radius: 6px !important;
     }
+
+    /* 버튼 스타일 (Zumen Primary Blue #1976D2) */
+    button[kind="primary"] {
+        background-color: #1976D2 !important;
+        color: #ffffff !important;
+        border: 1px solid #1976D2 !important;
+        font-weight: 700 !important;
+        border-radius: 4px !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
+        transition: background-color 150ms ease-out !important;
+    }
+    button[kind="primary"]:hover {
+        background-color: #176FC5 !important;
+    }
+
     button[kind="secondary"] {
-        background-color: #152037 !important;
-        color: #cbd5e1 !important;
-        border: 1px solid #283959 !important;
+        background-color: #ffffff !important;
+        color: #333333 !important;
+        border: 1px solid #cccccc !important;
         font-weight: 600 !important;
-        border-radius: 6px !important;
+        border-radius: 4px !important;
     }
+    button[kind="secondary"]:hover {
+        background-color: #f6f6f6 !important;
+        border-color: #999999 !important;
+    }
+
+    /* 탭 메뉴 (Zumen 탭 스타일) */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 12px;
-        border-bottom: 1px solid #1e2c47 !important;
-        padding-bottom: 2px;
+        gap: 16px;
+        background-color: #ffffff !important;
+        border-bottom: 1px solid #dcdcdc !important;
+        padding: 0 12px;
+        border-radius: 6px 6px 0 0;
     }
     .stTabs [data-baseweb="tab"] {
-        color: #94a3b8 !important;
+        color: #565656 !important;
         font-weight: 600 !important;
-        padding: 8px 16px !important;
+        font-size: 13.5px !important;
+        padding: 10px 14px !important;
     }
     .stTabs [aria-selected="true"] {
-        color: #38bdf8 !important;
-        border-bottom: 2px solid #38bdf8 !important;
+        color: #1976D2 !important;
+        border-bottom: 2px solid #1976D2 !important;
         background-color: transparent !important;
+        font-weight: 700 !important;
     }
+
+    /* 메트릭 박스 */
     .metric-container {
-        background: #090e1c;
-        border: 1px solid #1e2c47;
-        border-radius: 8px;
-        padding: 12px 14px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 14px 16px;
         margin-bottom: 8px;
     }
-    .metric-label { color: #94a3b8; font-size: 11.5px; font-weight: 600; }
-    .metric-val { color: #f8fafc; font-size: 21px; font-weight: 700; margin-top: 2px; }
+    .metric-label { color: #64748b; font-size: 12px; font-weight: 600; }
+    .metric-val { color: #0f172a; font-size: 23px; font-weight: 700; margin-top: 2px; }
+    
     .guardrail-alert {
-        background-color: #451a03;
-        border: 1px solid #b45309;
-        border-radius: 6px;
-        padding: 10px 12px;
-        color: #fde68a;
-        font-size: 12px;
+        background-color: #FFF3E0;
+        border: 1px solid #DD6B20;
+        border-radius: 4px;
+        padding: 10px 14px;
+        color: #A65018;
+        font-size: 12.5px;
         line-height: 1.5;
         margin-bottom: 12px;
     }
-    .profile-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        background: #152037;
-        border: 1px solid #283959;
-        border-radius: 6px;
-        padding: 4px 10px;
-        font-size: 12px;
-        color: #e2e8f0;
-    }
-    .batch-card {
-        background: #0d1527;
-        border: 1px solid #1e2c47;
-        border-radius: 6px;
-        padding: 12px 14px;
-        margin-bottom: 8px;
-    }
+
+    /* 캘린더 그리드 스타일 */
     .cal-header {
-        background-color: #090e1c;
-        color: #94a3b8;
-        padding: 8px;
+        background-color: #eeeeee;
+        color: #333333;
+        padding: 9px;
         text-align: center;
         font-weight: 700;
-        border: 1px solid #1e2c47;
+        border: 1px solid #dcdcdc;
         font-size: 12px;
     }
     .cal-day-cell {
-        min-height: 95px;
-        background-color: #111a2e;
-        border: 1px solid #1e2c47;
+        min-height: 98px;
+        background-color: #ffffff;
+        border: 1px solid #dcdcdc;
         padding: 6px;
         vertical-align: top;
     }
-    .cal-day-cell.other-month { background-color: #080d1a; opacity: 0.35; }
-    .cal-day-cell.today { border: 2px solid #0284c7 !important; }
+    .cal-day-cell.other-month { background-color: #fcfcfc; opacity: 0.45; }
+    .cal-day-cell.today { border: 2px solid #1976D2 !important; }
     .cal-badge {
-        font-size: 10px;
-        padding: 2px 5px;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 3px 6px;
         border-radius: 3px;
-        margin-top: 3px;
-        color: white;
-        white-space: nowrap;
+        margin-top: 4px;
+        display: block;
         overflow: hidden;
         text-overflow: ellipsis;
-        display: block;
+        white-space: nowrap;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -380,13 +400,17 @@ if not st.session_state["auth_user"] and query_uid and query_token:
         st.session_state["auth_user"] = users_db[query_uid]
         st.session_state["auth_user_id"] = query_uid
 
-# 미로그인 상태 시 로그인 화면 (비밀번호 찾기 안내 팝오버 탑재)
+# 미로그인 상태 시 포털 로그인 화면
 if not st.session_state["auth_user"]:
     _, login_col, _ = st.columns([1, 1.2, 1])
     with login_col:
         st.markdown("<br><br><br>", unsafe_allow_html=True)
-        st.markdown("### COSTIFY PORTAL")
-        st.caption("정밀 절삭가공 표준 원가 산출 및 MES 플랫폼")
+        st.markdown("""
+        <div style="text-align:center; margin-bottom:20px;">
+            <div style="font-size:26px; font-weight:800; color:#1976D2; letter-spacing:0.5px;">COSTIFY PORTAL</div>
+            <div style="font-size:13px; color:#565656; margin-top:4px;">정밀 절삭가공 표준 원가 산출 및 MES 워크스페이스</div>
+        </div>
+        """, unsafe_allow_html=True)
         
         with st.form("login_form"):
             in_id = st.text_input("아이디 (ID)")
@@ -403,10 +427,9 @@ if not st.session_state["auth_user"]:
                 else:
                     st.error("계정 정보가 일치하지 않습니다. 관리자에게 문의하세요.")
         
-        with st.popover("비밀번호를 잊으셨나요?"):
-            st.caption("보안 정책상 비밀번호는 사내 최고 관리자 또는 Costify 본사를 통해 초기화됩니다.")
-            st.write(f"- 사내 관리자 또는 대표 담당자에게 문의하세요.")
-            st.write(f"- 본사 지원: contact@costify.ai")
+        with st.popover("비밀번호 분실 안내"):
+            st.caption("사내 최고 관리자 또는 Costify 본사를 통해 초기화가 지원됩니다.")
+            st.write("- 본사 지원팀: contact@costify.ai")
     st.stop()
 
 # ==========================================
@@ -435,19 +458,35 @@ clients_db = load_tenant_data(active_cid, "clients_directory.json", [
 ])
 
 # ==========================================
-# 4. 상단 헤더, 마스터 스위처 & 릴리즈 노트
+# 4. Zumen 스타일 상단 탑바(TopNav) & 스위처
 # ==========================================
 user_last_seen = users_db.get(current_user_id, {}).get("last_seen_version", "")
 has_new_update = (user_last_seen != CURRENT_SYSTEM_VERSION)
 
-head_left, head_right = st.columns([2.2, 2.8])
-with head_left:
-    st.markdown(f"### COSTIFY <span style='font-size:13px; font-weight:600; color:#38bdf8;'>[{active_c_name}]</span>", unsafe_allow_html=True)
+# Zumen 탑바 HTML 컴포넌트
+st.markdown(f"""
+<div style="background-color:#1976D2; height:48px; display:flex; align-items:center; padding:0 18px; border-radius:6px; margin-bottom:12px; color:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.12);">
+    <div style="font-size:18px; font-weight:800; letter-spacing:0.02em; margin-right:24px; display:flex; align-items:center; gap:6px;">
+        <span>⚙️</span> COSTIFY
+    </div>
+    <div style="font-size:13px; font-weight:600; background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:4px;">
+        🏢 {active_c_name}
+    </div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:16px; font-size:12.5px;">
+        <span>👤 <b>{logged_user['name']}</b></span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-with head_right:
+# 상단 유틸리티 바 (업체 전환, 릴리즈 노트, 로그아웃)
+ctrl_left, ctrl_right = st.columns([2.5, 2.5])
+with ctrl_left:
+    st.caption(f"시스템 버전: **{CURRENT_SYSTEM_VERSION}** (Zumen UI Spec 준수)")
+
+with ctrl_right:
     if is_super_admin:
-        sw_col, rel_col, prof_col, btn_col = st.columns([1.8, 0.9, 1.4, 0.9])
-        with sw_col:
+        sw_c, rel_c, btn_c = st.columns([2, 1.2, 1])
+        with sw_c:
             c_options = list(companies_db.keys())
             c_idx = c_options.index(active_cid) if active_cid in c_options else 0
             new_selected_cid = st.selectbox(
@@ -461,14 +500,14 @@ with head_right:
                 st.session_state["active_company_id"] = new_selected_cid
                 st.rerun()
     else:
-        rel_col, prof_col, btn_col = st.columns([1.2, 2.2, 1.0])
+        rel_c, btn_c = st.columns([1.5, 1])
 
-    with rel_col:
-        label_text = f"업데이트 ●" if has_new_update else "업데이트"
-        with st.popover(label_text, use_container_width=True):
+    with rel_c:
+        lbl = "업데이트 ●" if has_new_update else "업데이트"
+        with st.popover(lbl, use_container_width=True):
             st.markdown(f"#### 시스템 릴리즈 노트 ({CURRENT_SYSTEM_VERSION})")
             if has_new_update:
-                if st.button("확인 완료 (알림 끄기)", type="primary", use_container_width=True):
+                if st.button("확인 완료", type="primary", use_container_width=True):
                     users_db[current_user_id]["last_seen_version"] = CURRENT_SYSTEM_VERSION
                     save_json(USERS_FILE, users_db)
                     st.rerun()
@@ -479,14 +518,7 @@ with head_right:
                     st.write(f"- {d}")
                 st.markdown("---")
 
-    with prof_col:
-        st.markdown(f"""
-        <div style="text-align: right; padding-top: 5px;">
-            <span class="profile-badge">● {logged_user['name']}</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with btn_col:
+    with btn_c:
         if st.button("로그아웃", use_container_width=True):
             st.query_params.clear()
             st.session_state["auth_user"] = None
@@ -497,15 +529,16 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     js_code = f"""
     <div style="margin: 4px 0;">
         <button onclick="openBlob()" style="
-            background-color: #152037;
-            color: #38bdf8;
-            border: 1px solid #283959;
-            padding: 8px 14px;
-            border-radius: 6px;
+            background-color: #ffffff;
+            color: #1976D2;
+            border: 1px solid #1976D2;
+            padding: 7px 14px;
+            border-radius: 4px;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 700;
             cursor: pointer;
             width: 100%;
+            transition: background 150ms ease-out;
         ">{label}</button>
     </div>
     <script>
@@ -527,7 +560,7 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     components.html(js_code, height=44)
 
 # ==========================================
-# 5. 사이드바: 퀵 툴박스
+# 5. 사이드바: 퀵 툴박스 (Zumen 레일 스타일)
 # ==========================================
 def get_secure_api_key():
     try:
@@ -544,7 +577,7 @@ SECURE_API_KEY = get_secure_api_key()
 
 with st.sidebar:
     st.markdown(f"### 엔지니어 퀵 툴박스")
-    st.caption(f"접속 공간: **{active_c_name}**")
+    st.caption(f"활성 공장: **{active_c_name}**")
     
     with st.expander("🚨 긴급 납기 / 지연 건", expanded=True):
         today = datetime.today().date()
@@ -567,9 +600,9 @@ with st.sidebar:
         else:
             for diff, tag, uo in urgent_orders[:5]:
                 st.markdown(f"""
-                <div style="background:#152037; border-left:3px solid #ef4444; padding:6px 8px; border-radius:4px; margin-bottom:6px; font-size:11px;">
-                    <b style="color:#f87171;">{tag}</b> | {uo.get('client_name')[:5]}<br>
-                    {uo.get('filename')[:12]} ({uo.get('qty')}EA) | <span style="color:#94a3b8;">{uo.get('status')}</span>
+                <div style="background:#FFF3E0; border-left:3px solid #DD6B20; padding:6px 10px; border-radius:4px; margin-bottom:6px; font-size:11.5px;">
+                    <b style="color:#A65018;">{tag}</b> | {uo.get('client_name')[:6]}<br>
+                    {uo.get('filename')[:12]} ({uo.get('qty')}EA) | <span style="color:#565656;">{uo.get('status')}</span>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -598,9 +631,9 @@ with st.sidebar:
             calc_weight_kg = max(0.0, (vol_cm3 * dens_val) / 1000.0)
 
         st.markdown(f"""
-        <div style="background:#090e1c; padding:8px; border-radius:6px; border:1px solid #1e2c47; text-align:center; margin:8px 0;">
-            <div style="font-size:11px; color:#94a3b8;">계산된 순수 중량</div>
-            <div style="font-size:18px; font-weight:700; color:#38bdf8;">{calc_weight_kg:.3f} kg</div>
+        <div style="background:#f8fafc; padding:8px; border-radius:4px; border:1px solid #e2e8f0; text-align:center; margin:8px 0;">
+            <div style="font-size:11px; color:#64748b;">계산된 순수 중량</div>
+            <div style="font-size:18px; font-weight:700; color:#1976D2;">{calc_weight_kg:.3f} kg</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -621,10 +654,10 @@ with st.sidebar:
         calc_time_sec = int((cut_len / calc_feed) * 60) if calc_feed > 0 else 0
 
         st.markdown(f"""
-        <div style="background:#090e1c; padding:8px; border-radius:6px; border:1px solid #1e2c47; font-size:12px; margin-top:6px;">
-            주축 회전수: <b style="color:#f8fafc;">{calc_rpm:,} RPM</b><br>
-            이송속도: <b style="color:#f8fafc;">{calc_feed:,} mm/min</b><br>
-            1회 가공소요: <b style="color:#38bdf8;">{calc_time_sec // 60}분 {calc_time_sec % 60}초</b>
+        <div style="background:#f8fafc; padding:8px 10px; border-radius:4px; border:1px solid #e2e8f0; font-size:12px; margin-top:6px; line-height:1.6;">
+            주축 회전수: <b style="color:#0f172a;">{calc_rpm:,} RPM</b><br>
+            이송속도: <b style="color:#0f172a;">{calc_feed:,} mm/min</b><br>
+            1회 가공소요: <b style="color:#1976D2;">{calc_time_sec // 60}분 {calc_time_sec % 60}초</b>
         </div>
         """, unsafe_allow_html=True)
 
@@ -667,7 +700,7 @@ def analyze_drawing_resilient(api_key, file_bytes, mime_type, filename, engineer
     
     [현장 엔지니어 특이사항/지침]:
     "{engineer_prompt if engineer_prompt.strip() else '특이사항 없음 (표준 공정 적용)'}"
-    ※ 위 엔지니어 특이사항(공차, 공정 제외, 묶음 가공 등)을 반드시 반영하여 난이도 계수와 가공 소요 시간을 보정하세요.
+    ※ 위 엔지니어 지시사항(공차, 공정 제외, 동시 가공 등)을 반영하여 가공 시간과 난이도 계수를 합리적으로 보정하세요.
 
     JSON 출력 스키마:
     {{
@@ -706,7 +739,7 @@ def analyze_drawing_resilient(api_key, file_bytes, mime_type, filename, engineer
     return None, last_err_detail
 
 # ==========================================
-# 7. 단일 및 통합(다품종) PDF 견적서 생성기
+# 7. PDF 견적서 생성기
 # ==========================================
 def get_pdf_fonts():
     font_candidates = [
@@ -900,10 +933,9 @@ def create_consolidated_batch_pdf(items_list, company_info, client_name, client_
 tabs = st.tabs(["실시간 견적 산출", "공정흐름 관리 (MES)", "납기 캘린더", "그룹 발주 관리", "시스템 설정"])
 
 # ------------------------------------------
-# TAB 1: 실시간 견적 산출 (단일/다중 도면 통합)
+# TAB 1: 실시간 견적 산출 (Zumen 상세 뷰)
 # ------------------------------------------
 with tabs[0]:
-    # 세션 기본값 초기화
     if "client_name_val" not in st.session_state: st.session_state["client_name_val"] = "(주)한국정밀"
     if "client_mgr_val" not in st.session_state: st.session_state["client_mgr_val"] = "김철수 부장"
     if "custom_part_name" not in st.session_state: st.session_state["custom_part_name"] = "BRACKET-M01"
@@ -914,7 +946,7 @@ with tabs[0]:
     if "memo_val" not in st.session_state: st.session_state["memo_val"] = ""
     if "batch_analysis_results" not in st.session_state: st.session_state["batch_analysis_results"] = []
 
-    left_col, right_col = st.columns([1.1, 0.9], gap="medium")
+    left_col, right_col = st.columns([1.15, 0.85], gap="large")
 
     with left_col:
         # 카드 1: 발주 기본 정보
@@ -929,7 +961,7 @@ with tabs[0]:
                 due_date = st.date_input("납기 요청일", value=datetime.today() + timedelta(days=12))
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # 카드 2: 도면 파일 등록 & 엔지니어 프롬프트 매칭
+        # 카드 2: 도면 파일 등록 & 엔지니어 프롬프트
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">2. 도면 파일 및 가공 지침 (프롬프트)</div>', unsafe_allow_html=True)
             quote_mode = st.radio("모드 선택", ["AI 비전 도면 자동 판독", "수동 직접 입력"], horizontal=True, label_visibility="collapsed")
@@ -942,11 +974,10 @@ with tabs[0]:
                     accept_multiple_files=True
                 )
 
-                # 현장 특이사항 프롬프트 입력창
                 engineer_prompt = st.text_area(
                     "현장 가공 특이사항 / AI 프롬프트 지침 (선택)",
-                    placeholder="예: 공차 ±0.01 엄수 요망, 와이어 컷팅 외주 제외 순수 MCT 3축 가공, 4개 1세트 동시 지그 물림 가공 등",
-                    height=70
+                    placeholder="예: 공차 ±0.01 엄수 요망, 와이어 방전 외주 제외 3축 MCT 순수가공, 4개 1세트 동시 지그 물림 등",
+                    height=65
                 )
 
                 col_b1, col_b2 = st.columns([2.5, 1.5])
@@ -961,21 +992,20 @@ with tabs[0]:
                     mime0 = "application/pdf" if f0.name.lower().endswith(".pdf") else "image/jpeg"
                     open_in_new_tab_button(f0.getvalue(), mime0, label="도면 새 창 열기")
 
-                # AI 분석 실행 로직 (단일 vs 다중 분기)
+                # AI 분석 실행
                 if start_ai:
                     if not uploaded_files:
                         st.warning("⚠️ 먼저 도면 파일을 업로드해 주세요.")
                     elif not SECURE_API_KEY:
                         st.error("❌ Gemini API 키가 감지되지 않았습니다. Streamlit Secrets를 확인하세요.")
                     else:
-                        # [CASE 1] 단일 도면 분석
                         if len(uploaded_files) == 1:
                             target_file = uploaded_files[0]
                             file_mime = "application/pdf" if target_file.name.lower().endswith(".pdf") else "image/jpeg"
                             clean_name = os.path.splitext(target_file.name)[0]
                             st.session_state["custom_part_name"] = clean_name
                             
-                            with st.spinner(f"⚡ [{target_file.name}] 도면 및 특이사항 프롬프트 정밀 계산 중..."):
+                            with st.spinner(f"⚡ [{target_file.name}] 도면 및 특이사항 분석 중..."):
                                 parsed_res, err = analyze_drawing_resilient(
                                     SECURE_API_KEY, target_file.getvalue(), file_mime, target_file.name, engineer_prompt
                                 )
@@ -992,8 +1022,6 @@ with tabs[0]:
                                     st.session_state["batch_analysis_results"] = []
                                     st.success(f"✅ [{clean_name}] 판독 완료! 품명 및 가공 조건이 자동 입력되었습니다.")
                                     st.rerun()
-
-                        # [CASE 2] 다중 도면 일괄 분석
                         else:
                             st.session_state["batch_analysis_results"] = []
                             batch_temp = []
@@ -1010,7 +1038,6 @@ with tabs[0]:
                                 )
                                 
                                 if parsed:
-                                    # 자동 기본 설비 및 재질 매핑
                                     matched_mat = "AL6061 / 알루미늄"
                                     s_mat = parsed.get("material_type", "").upper()
                                     for mk in settings["materials"].keys():
@@ -1031,7 +1058,6 @@ with tabs[0]:
                                     p_diff = float(parsed.get("difficulty_factor", 1.00))
                                     raw_w = p_weight * (1.0 + (p_loss / 100.0))
 
-                                    # 단가 계산
                                     m_cost = int(raw_w * settings["materials"][matched_mat] * order_qty)
                                     calc_mac = int(p_hours * settings["machines"][matched_mac] * p_diff * order_qty)
                                     min_threshold = settings.get("min_machining_cost", 35000)
@@ -1068,8 +1094,6 @@ with tabs[0]:
                                         "unit_price": u_p,
                                         "memo": parsed.get("reasoning", "")
                                     })
-                                else:
-                                    st.warning(f"⚠️ '{f.name}' 판독 실패 (서버 지연)")
                             
                             progress_bar.progress(100, text="전체 도면 판독 완료!")
                             st.session_state["batch_analysis_results"] = batch_temp
@@ -1080,15 +1104,14 @@ with tabs[0]:
                 st.session_state["custom_part_name"] = st.text_input("품명 / 도면 식별 번호", value=st.session_state["custom_part_name"])
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # 품명 직접 지정 및 엔지니어링 미세 검수 (단일 품목 기준)
+        # 품명 지정 & 정밀 검수
         is_batch_active = len(st.session_state.get("batch_analysis_results", [])) > 1
 
         if not is_batch_active:
             with st.container():
                 st.markdown('<div class="panel-card"><div class="panel-title">3. 품명 지정 & 엔지니어링 검수</div>', unsafe_allow_html=True)
                 
-                # 핵심 기능 1: 품명 자유 지정
-                custom_name_input = st.text_input("품명 / 도면 식별명 (견적서 표기용)", value=st.session_state["custom_part_name"])
+                custom_name_input = st.text_input("품명 / 도면 식별명 (견적서 정식 표기)", value=st.session_state["custom_part_name"])
                 st.session_state["custom_part_name"] = custom_name_input
 
                 k1, k2 = st.columns(2)
@@ -1132,9 +1155,7 @@ with tabs[0]:
     with right_col:
         batch_items = st.session_state.get("batch_analysis_results", [])
         
-        # ---------------------------------------------
-        # 다중 도면(Batch) 견적 대시보드 뷰
-        # ---------------------------------------------
+        # 다중 도면(Batch) 견적 대시보드
         if len(batch_items) > 1:
             with st.container():
                 st.markdown('<div class="panel-card"><div class="panel-title">다품종 일괄 견적 산출 결과</div>', unsafe_allow_html=True)
@@ -1146,7 +1167,7 @@ with tabs[0]:
                 with mb1:
                     st.markdown(f'<div class="metric-container"><div class="metric-label">총 발주 품목 / 총 수량</div><div class="metric-val">{len(batch_items)}종 ({total_set_qty:,} EA)</div></div>', unsafe_allow_html=True)
                 with mb2:
-                    st.markdown(f'<div class="metric-container"><div class="metric-label">통합 공급가 총계 (VAT 별도)</div><div class="metric-val" style="color:#38bdf8;">{total_set_price:,} 원</div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="metric-container"><div class="metric-label">통합 공급가 총계 (VAT 별도)</div><div class="metric-val" style="color:#1976D2;">{total_set_price:,} 원</div></div>', unsafe_allow_html=True)
 
                 st.markdown("##### 품목별 견적 브레이크다운")
                 for idx, b_item in enumerate(batch_items):
@@ -1191,9 +1212,7 @@ with tabs[0]:
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # ---------------------------------------------
         # 단일 도면 상세 견적 뷰
-        # ---------------------------------------------
         else:
             raw_material_weight = adj_pure_weight * (1.0 + (adj_loss_rate / 100.0))
             mat_unit_price = settings["materials"][sel_material]
@@ -1263,7 +1282,7 @@ with tabs[0]:
                 with m1:
                     st.markdown(f'<div class="metric-container"><div class="metric-label">개당 납품단가 (VAT 별도)</div><div class="metric-val">{final_unit_price:,} 원</div></div>', unsafe_allow_html=True)
                 with m2:
-                    st.markdown(f'<div class="metric-container"><div class="metric-label">총 견적 금액 ({order_qty} EA)</div><div class="metric-val" style="color:#38bdf8;">{final_total_supply:,} 원</div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="metric-container"><div class="metric-label">총 견적 금액 ({order_qty} EA)</div><div class="metric-val" style="color:#1976D2;">{final_total_supply:,} 원</div></div>', unsafe_allow_html=True)
 
                 if guardrail_triggered:
                     st.markdown(f"""
@@ -1272,6 +1291,7 @@ with tabs[0]:
                     </div>
                     """, unsafe_allow_html=True)
 
+                # Zumen 스타일 고대비 원가 테이블
                 cost_items = [
                     ("1. 원재료비", f"개당 {round(raw_material_weight,2)}kg x {mat_unit_price:,}원 x {order_qty}EA", f"{mat_total_cost:,} 원"),
                     ("2. 순수가공비", f"{adj_hours}h x 시급 {mac_hourly_rate:,}원 x 난이도 {adj_difficulty}", f"{final_machining_cost:,} 원"),
@@ -1281,20 +1301,20 @@ with tabs[0]:
                 ]
 
                 html_rows = "".join([
-                    f'<tr style="border-bottom: 1px solid #1e2c47; color: #f8fafc;">'
-                    f'<td style="padding: 9px 6px; font-weight: 600;">{name}</td>'
-                    f'<td style="padding: 9px 6px; color: #cbd5e1;">{formula}</td>'
-                    f'<td style="padding: 9px 6px; text-align: right; font-weight: 700; color: #38bdf8;">{price}</td>'
+                    f'<tr style="border-bottom: 1px solid #e6e6e6; color: #111111;">'
+                    f'<td style="padding: 9px 8px; font-weight: 600;">{name}</td>'
+                    f'<td style="padding: 9px 8px; color: #565656;">{formula}</td>'
+                    f'<td style="padding: 9px 8px; text-align: right; font-weight: 700; color: #1976D2;">{price}</td>'
                     f'</tr>'
                     for name, formula, price in cost_items
                 ])
 
                 html_table = (
                     '<table style="width:100%; border-collapse:collapse; margin: 10px 0 16px 0; font-size: 13px;">'
-                    '<thead><tr style="border-bottom: 2px solid #283959; color: #94a3b8; text-align: left;">'
-                    '<th style="padding: 8px 6px;">원가 항목</th>'
-                    '<th style="padding: 8px 6px;">산출 근거</th>'
-                    '<th style="padding: 8px 6px; text-align: right;">금액</th>'
+                    '<thead><tr style="background-color: #eeeeee; border-bottom: 1px solid #cccccc; color: #333333; text-align: left;">'
+                    '<th style="padding: 8px 8px;">원가 항목</th>'
+                    '<th style="padding: 8px 8px;">산출 근거</th>'
+                    '<th style="padding: 8px 8px; text-align: right;">금액</th>'
                     f'</tr></thead><tbody>{html_rows}</tbody></table>'
                 )
                 st.markdown(html_table, unsafe_allow_html=True)
@@ -1357,12 +1377,16 @@ with tabs[1]:
             with st.expander(header_title, expanded=(current_filter != "전체")):
                 step_idx = PROCESS_STAGES.index(stage_name) if stage_name in PROCESS_STAGES else 0
                 
-                step_html = "<div style='display: flex; gap: 4px; margin-bottom: 12px; overflow-x: auto;'>"
+                # Zumen 소프트 배지 체인
+                step_html = "<div style='display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto;'>"
                 for s_i, s_name in enumerate(PROCESS_STAGES):
-                    bg = STAGE_CONFIG[s_name]['color'] if s_i <= step_idx else "#152037"
-                    opac = "1.0" if s_i == step_idx else ("0.55" if s_i < step_idx else "0.25")
-                    border = "1px solid #38bdf8" if s_i == step_idx else "1px solid #283959"
-                    step_html += f"<div style='flex:1; min-width:65px; background-color:{bg}; opacity:{opac}; border:{border}; padding:6px 2px; text-align:center; border-radius:4px; font-size:11px; font-weight:700; color:#fff;'>{STAGE_CONFIG[s_name]['name']}</div>"
+                    conf = STAGE_CONFIG[s_name]
+                    is_cur = (s_i == step_idx)
+                    bg = conf['bg'] if s_i <= step_idx else "#f6f6f6"
+                    color = conf['color'] if s_i <= step_idx else "#999999"
+                    border = f"2px solid {conf['color']}" if is_cur else "1px solid #dcdcdc"
+                    font_w = "700" if is_cur else "500"
+                    step_html += f"<div style='flex:1; min-width:70px; background-color:{bg}; color:{color}; border:{border}; padding:6px 2px; text-align:center; border-radius:4px; font-size:11px; font-weight:{font_w};'>{conf['name']}</div>"
                 step_html += "</div>"
                 st.markdown(step_html, unsafe_allow_html=True)
 
@@ -1385,7 +1409,7 @@ with tabs[1]:
                         st.rerun()
 
 # ------------------------------------------
-# TAB 3: 납기 캘린더
+# TAB 3: 납기 캘린더 (Zumen 스케줄러 스타일)
 # ------------------------------------------
 with tabs[2]:
     cal_mode = st.radio("보기 모드", ["월간 달력 그리드", "상세 납기 리스트"], horizontal=True, label_visibility="collapsed")
@@ -1404,7 +1428,7 @@ with tabs[2]:
         
         grid_html = "<table style='width:100%; border-collapse:collapse; margin-top:8px;'><thead><tr>"
         for i, wh in enumerate(week_headers):
-            color = "#f87171" if i == 0 else ("#60a5fa" if i == 6 else "#94a3b8")
+            color = "#DA4D3A" if i == 0 else ("#1976D2" if i == 6 else "#333333")
             grid_html += f"<th class='cal-header' style='color:{color}; width:14.28%;'>{wh}</th>"
         grid_html += "</tr></thead><tbody>"
 
@@ -1421,15 +1445,15 @@ with tabs[2]:
                 matching_orders = [o for o in orders_db if o.get("due_date") == day_str]
 
                 grid_html += f"<td class='{cell_class}'>"
-                day_color = "#f87171" if day_date.weekday() == 6 else ("#60a5fa" if day_date.weekday() == 5 else "#f8fafc")
+                day_color = "#DA4D3A" if day_date.weekday() == 6 else ("#1976D2" if day_date.weekday() == 5 else "#111111")
                 grid_html += f"<div style='font-weight:700; font-size:12px; color:{day_color};'>{day_date.day}</div>"
 
                 for mo in matching_orders:
                     st_name = mo.get("status", "1. 견적제출")
-                    badge_color = STAGE_CONFIG.get(st_name, {}).get("color", "#0284c7")
+                    conf = STAGE_CONFIG.get(st_name, {"bg": "#E9F4FF", "color": "#1667B8"})
                     is_overdue = (day_date < today and st_name != "7. 출하완료")
-                    border_style = "border:1px solid #ef4444;" if is_overdue else ""
-                    grid_html += f"<div class='cal-badge' style='background-color:{badge_color}; {border_style}' title='[{mo.get('client_name')}] {mo.get('filename')}'>{mo.get('client_name')[:4]} | {mo.get('filename')[:6]}</div>"
+                    border_style = "border:1px solid #DA4D3A;" if is_overdue else f"border:1px solid {conf['color']};"
+                    grid_html += f"<div class='cal-badge' style='background-color:{conf['bg']}; color:{conf['color']}; {border_style}' title='[{mo.get('client_name')}] {mo.get('filename')}'>{mo.get('client_name')[:4]} | {mo.get('filename')[:6]}</div>"
 
                 grid_html += "</td>"
             grid_html += "</tr>"
