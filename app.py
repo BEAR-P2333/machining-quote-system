@@ -1222,7 +1222,7 @@ def render_veteran_detail_view(quote_id):
                 st.success("공정 상태가 변경되었습니다.")
                 st.rerun()
 
-        st.markdown("##### 🚀 1단계 & 3단계 원클릭 비즈니스 연동")
+        st.markdown("##### 🚀 원클릭 비즈니스 연동")
         act_col1, act_col2 = st.columns(2)
         with act_col1:
             # 1단계 알림톡 견적서 전송
