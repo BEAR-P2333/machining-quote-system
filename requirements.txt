@@ -1,5 +1,5 @@
 streamlit
 openai
 pypdfium2
-fpdf
+fpdf2
 pandas
