@@ -4,7 +4,7 @@ import streamlit as st
 # [중요] 최상단 와이드 레이아웃 강제 지정 (화면 찌그러짐 방지)
 # ==========================================
 st.set_page_config(
-    page_title="Costify | 정밀 절삭가공 견적 & MES",
+    page_title="Costify | 정밀 절삭가공 견적 시스템",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -739,7 +739,7 @@ with st.sidebar:
                     st.rerun()
 
 # ==========================================
-# 6. 초고속 Google Gemini 2.5 Flash 네이티브 도면 분석 엔진 (2~3초)
+# 6. 초고속 Google Gemini 3.5 Flash 네이티브 도면 분석 엔진 (2~3초)
 # ==========================================
 def analyze_drawing_gemini(api_key, file_bytes, mime_type, filename, engineer_prompt=""):
     if not api_key:
@@ -771,7 +771,7 @@ def analyze_drawing_gemini(api_key, file_bytes, mime_type, filename, engineer_pr
     for attempt in range(2):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
                 contents=[doc_part, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
@@ -1154,7 +1154,7 @@ with tabs[0]:
                 st.dataframe(pd.DataFrame(table_rows), hide_index=True, use_container_width=True)
 
 # ------------------------------------------
-# TAB 2: 신규 견적 산출 (Google Gemini 2.5 Flash 엔진)
+# TAB 2: 신규 견적 산출 (Google Gemini 3.5 Flash 엔진)
 # ------------------------------------------
 with tabs[1]:
     if "client_name_val" not in st.session_state: st.session_state["client_name_val"] = "(주)한국정밀"
@@ -1215,7 +1215,7 @@ with tabs[1]:
                         clean_name = os.path.splitext(uploaded_file.name)[0]
                         st.session_state["custom_part_name"] = clean_name
                         
-                        with st.spinner("⚡ Gemini 2.5 Flash 도면 정밀 분석 중... (약 2초)"):
+                        with st.spinner("⚡ 도면 정밀 분석 중... (약 2초)"):
                             file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                             parsed_res, err = analyze_drawing_gemini(
                                 SECURE_GEMINI_KEY, uploaded_file.getvalue(), file_mime, uploaded_file.name, engineer_prompt
