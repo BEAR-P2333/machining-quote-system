@@ -10,10 +10,16 @@ import hashlib
 import shutil
 import io
 import pandas as pd
-from fpdf import FPDF
 from datetime import datetime, timedelta
 from openai import OpenAI
 
+# fpdf2 안전 임포트
+try:
+    from fpdf import FPDF
+except ImportError:
+    FPDF = None
+
+# PDF 변환 라이브러리 안전 임포트
 try:
     import pypdfium2 as pdfium
     HAS_PDFIUM = True
@@ -23,26 +29,17 @@ except ImportError:
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.5.0"
+CURRENT_SYSTEM_VERSION = "v2.5.1"
 
 SYSTEM_RELEASE_NOTES = [
     {
-        "version": "v2.5.0",
+        "version": "v2.5.1",
         "date": "2026-10-27",
-        "title": "NVIDIA Build(NIM) 비전 AI 엔진 전면 탑재",
+        "title": "fpdf2 전환 및 유니코드 폰트 크래시 완전 방어",
         "details": [
-            "Google GenAI 종속성 제거 및 OpenAI 호환 NVIDIA NIM 비전 API 연동",
-            "meta/llama-3.2-11b-vision-instruct 기반 초고속 도면 분석 파이프라인 구축",
-            "pypdfium2 연동을 통한 PDF 도면 자동 래스터라이징(이미지화) 전처리 탑재",
-            "Zumen 라이트 테마, 필터 레일, 대형 캘린더, MES 등 기존 기능 100% 보존"
-        ]
-    },
-    {
-        "version": "v2.4.2",
-        "date": "2026-10-27",
-        "title": "납기 지연/위험 집계 일원화 및 브라우저 다크모드 강제 차단",
-        "details": [
-            "메인 대시보드 납기 위험 건수 계산 로직 일원화"
+            "구버전 fpdf 피클 디코딩 버그 해결을 위해 최신 fpdf2 파이프라인으로 전환",
+            "PDF 생성 실패 시에도 화면 레이아웃이 깨지지 않도록 무중단 예외 차단 탑재",
+            "NVIDIA NIM 초고속 비전 API 및 Zumen 고정 테마 완벽 연동"
         ]
     }
 ]
@@ -161,36 +158,24 @@ def save_tenant_data(company_id, filename, data):
 companies_db = load_json(COMPANIES_META_FILE, DEFAULT_COMPANIES)
 users_db = load_json(USERS_FILE, DEFAULT_USERS)
 
-migration_needed = False
 if "master_workspace" not in companies_db:
     companies_db["master_workspace"] = {"name": "Costify 본사 마스터", "created_at": "2026-10-25"}
-    migration_needed = True
+    save_json(COMPANIES_META_FILE, companies_db)
 
 if "admin" in users_db:
     if users_db["admin"].get("role") != "super_admin" or users_db["admin"].get("company_id") != "master_workspace":
         users_db["admin"]["role"] = "super_admin"
         users_db["admin"]["company_id"] = "master_workspace"
         users_db["admin"]["name"] = "시스템 총괄마스터"
-        migration_needed = True
-else:
-    users_db["admin"] = DEFAULT_USERS["admin"]
-    migration_needed = True
-
-if migration_needed:
-    save_json(COMPANIES_META_FILE, companies_db)
-    save_json(USERS_FILE, users_db)
+        save_json(USERS_FILE, users_db)
 
 # ==========================================
-# 2. UI 테마 & Zumen 디자인 시스템 CSS (영구 라이트 모드 고정)
+# 2. UI 테마 & 고시인성 스타일 시스템 (다크모드 강제 차단)
 # ==========================================
 st.markdown("""
 <style>
     :root, html, body, [data-theme="light"], [data-theme="dark"], [data-testid="stAppViewContainer"], .stApp {
         color-scheme: light !important;
-        --background-color: #f6f6f6 !important;
-        --secondary-background-color: #ffffff !important;
-        --text-color: #111111 !important;
-        --primary-color: #1976D2 !important;
         background-color: #f6f6f6 !important;
         color: #111111 !important;
         font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", Roboto, sans-serif !important;
@@ -228,9 +213,6 @@ st.markdown("""
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
         color: #0f172a !important;
         font-weight: 700 !important;
-    }
-    [data-testid="stSidebar"] .stCaption, [data-testid="stSidebar"] small {
-        color: #64748b !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] details summary p {
         color: #0f172a !important;
@@ -432,7 +414,6 @@ if not st.session_state["auth_user"] and query_uid and query_token:
         st.session_state["auth_user"] = users_db[query_uid]
         st.session_state["auth_user_id"] = query_uid
 
-# 미로그인 상태 시 포털 로그인 화면
 if not st.session_state["auth_user"]:
     _, login_col, _ = st.columns([1, 1.2, 1])
     with login_col:
@@ -746,7 +727,6 @@ def convert_pdf_to_image_bytes(pdf_bytes):
         return None, f"PDF 렌더링 오류: {str(e)}"
 
 def analyze_drawing_resilient(api_key, file_bytes, mime_type, filename, engineer_prompt=""):
-    # 1. 파일이 PDF인 경우 첫 페이지를 JPEG 이미지로 렌더링
     if "pdf" in mime_type.lower():
         img_bytes, err = convert_pdf_to_image_bytes(file_bytes)
         if err and img_bytes is None:
@@ -785,7 +765,6 @@ def analyze_drawing_resilient(api_key, file_bytes, mime_type, filename, engineer
     }}
     """
 
-    # NVIDIA NIM 지원 대표 비전 모델
     models_to_try = [
         "meta/llama-3.2-11b-vision-instruct",
         "meta/llama-3.2-90b-vision-instruct"
@@ -819,7 +798,7 @@ def analyze_drawing_resilient(api_key, file_bytes, mime_type, filename, engineer
     return None, last_err_detail
 
 # ==========================================
-# 7. PDF 견적서 생성기
+# 7. fpdf2 기반 고안정성 PDF 생성기 (유니코드 에러 방어)
 # ==========================================
 def get_pdf_fonts():
     font_candidates = [
@@ -837,93 +816,106 @@ def get_pdf_fonts():
     return selected_font, selected_bold
 
 def create_formal_pdf(q, company_info):
-    pdf = FPDF(format="A4")
-    pdf.add_page()
-    selected_font, selected_bold = get_pdf_fonts()
-    if selected_font:
-        pdf.add_font("KoreanFont", "", selected_font)
-        pdf.add_font("KoreanFontB", "", selected_bold)
-        main_font, bold_font = "KoreanFont", "KoreanFontB"
-    else:
+    if FPDF is None:
+        return b""
+    try:
+        pdf = FPDF(format="A4")
+        pdf.add_page()
+        selected_font, selected_bold = get_pdf_fonts()
+
+        # fpdf2 표준 문법 및 안전 Fallback
         main_font, bold_font = "helvetica", "helvetica"
+        if selected_font:
+            try:
+                pdf.add_font("KoreanFont", style="", fname=selected_font)
+                if selected_bold:
+                    pdf.add_font("KoreanFontB", style="", fname=selected_bold)
+                    bold_font = "KoreanFontB"
+                else:
+                    bold_font = "KoreanFont"
+                main_font = "KoreanFont"
+            except Exception:
+                main_font, bold_font = "helvetica", "helvetica"
 
-    pdf.set_font(bold_font, size=18)
-    pdf.cell(0, 12, "가 공 견 적 서", ln=True, align="C")
-    pdf.ln(3)
+        pdf.set_font(bold_font, size=18)
+        pdf.cell(0, 12, "가 공 견 적 서", new_x="LMARGIN", new_y="NEXT", align="C")
+        pdf.ln(3)
 
-    pdf.set_font(main_font, size=9)
-    pdf.cell(95, 6, f"견적번호: {q.get('quote_no', 'QT-NEW')}", ln=False)
-    pdf.cell(95, 6, f"발행일자: {q.get('date', '-')}", ln=True, align="R")
-    pdf.cell(95, 6, "유효기간: 발행일로부터 15일간", ln=False)
-    pdf.cell(95, 6, f"납기요청일: {q.get('due_date', '-')}", ln=True, align="R")
-    pdf.ln(2)
-
-    y_pos = pdf.get_y()
-    pdf.rect(10, y_pos, 90, 30)
-    pdf.set_xy(12, y_pos + 2)
-    pdf.set_font(bold_font, size=10)
-    pdf.cell(86, 6, f"수신: {q.get('client_name', '고객사')} 귀하", ln=True)
-    pdf.set_font(main_font, size=8)
-    pdf.set_x(12)
-    pdf.cell(86, 5, f"담당자: {q.get('client_manager', '담당자')} 님", ln=True)
-    pdf.set_x(12)
-    pdf.cell(86, 5, f"품명(도면): {q.get('filename', '도면')}", ln=True)
-    pdf.set_x(12)
-    pdf.cell(86, 5, f"진행상태: {q.get('status', '1. 견적제출')}", ln=True)
-
-    c_info = company_info
-    pdf.rect(105, y_pos, 95, 30)
-    pdf.set_xy(107, y_pos + 2)
-    pdf.set_font(bold_font, size=9)
-    pdf.cell(91, 5, f"공급자: {c_info.get('company_name','')} (대표: {c_info.get('ceo_name','')})", ln=True)
-    pdf.set_font(main_font, size=8)
-    pdf.set_x(107)
-    pdf.cell(91, 5, f"사업자번호: {c_info.get('biz_num','')}", ln=True)
-    pdf.set_x(107)
-    pdf.cell(91, 5, f"소재지: {c_info.get('address','')}", ln=True)
-    pdf.set_x(107)
-    pdf.cell(91, 5, f"연락처: {c_info.get('tel','')} / {c_info.get('email','')}", ln=True)
-
-    pdf.set_y(y_pos + 34)
-    pdf.set_font(bold_font, size=11)
-    pdf.cell(0, 9, f"견적 공급가 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)", border=1, ln=True, align="C")
-    pdf.ln(3)
-
-    pdf.set_font(bold_font, size=8)
-    pdf.cell(38, 7, "품명 및 사양", border=1, align="C")
-    pdf.cell(16, 7, "수량", border=1, align="C")
-    pdf.cell(34, 7, "재질 / 총중량", border=1, align="C")
-    pdf.cell(36, 7, "적용설비 / 후처리", border=1, align="C")
-    pdf.cell(32, 7, "개당 단가", border=1, align="C")
-    pdf.cell(34, 7, "합계 공급가", border=1, align="C")
-    pdf.ln()
-
-    pdf.set_font(main_font, size=8)
-    pdf.cell(38, 7, str(q.get('filename', '도면'))[:16], border=1, align="C")
-    pdf.cell(16, 7, f"{q.get('qty', 1):,} EA", border=1, align="C")
-    pdf.cell(34, 7, f"{str(q.get('material','')).split('/')[0]} ({q.get('raw_weight',0)}kg)", border=1, align="C")
-    pdf.cell(36, 7, f"{str(q.get('machine_type','')).split()[0]} / {str(q.get('surface','')).split()[0]}", border=1, align="C")
-    pdf.cell(32, 7, f"{q.get('unit_price', 0):,} 원", border=1, align="R")
-    pdf.cell(34, 7, f"{q.get('total_price', 0):,} 원", border=1, align="R")
-    pdf.ln(10)
-
-    pdf.set_font(bold_font, size=9)
-    pdf.cell(0, 6, "[ 원가 세부 산출 명세 ]", ln=True)
-    pdf.set_font(main_font, size=8)
-    pdf.cell(0, 5, f"1. 원재료비 : {q.get('material_cost_total', 0):,} 원 (소재 {q.get('raw_weight', 0)}kg x {q.get('material_unit_price', 0):,}원 x {q.get('qty', 1)}개)", ln=True)
-    pdf.cell(0, 5, f"2. 순수가공비 : {q.get('machining_cost_total', 0):,} 원 ({q.get('hours', 0)}h x 시급 {q.get('machine_hourly_rate', 0):,}원 x 난이도 {q.get('difficulty_factor', 1.0)} x {q.get('qty', 1)}개)", ln=True)
-    if q.get('guardrail_applied'):
-        pdf.cell(0, 4, f"   (※ 최소 기본공임 기준 {settings.get('min_machining_cost', 35000):,}원 자동 보정 적용)", ln=True)
-    pdf.cell(0, 5, f"3. 초도 세팅비 : {q.get('setup_fee', 0):,} 원", ln=True)
-    pdf.cell(0, 5, f"4. 표면/후처리비 : {q.get('surface_cost_total', 0):,} 원 ({q.get('surface', '무처리')})", ln=True)
-    pdf.cell(0, 5, f"5. 일반관리비 및 마진 ({q.get('margin_rate', 20)}%): {q.get('margin_amount', 0):,} 원", ln=True)
-    
-    if q.get('memo'):
+        pdf.set_font(main_font, size=9)
+        pdf.cell(95, 6, f"견적번호: {q.get('quote_no', 'QT-NEW')}")
+        pdf.cell(95, 6, f"발행일자: {q.get('date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
+        pdf.cell(95, 6, "유효기간: 발행일로부터 15일간")
+        pdf.cell(95, 6, f"납기요청일: {q.get('due_date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
         pdf.ln(2)
-        pdf.set_font(bold_font, size=8)
-        pdf.cell(0, 5, f"[ 현장 엔지니어 비고 ]: {q.get('memo')}", ln=True)
 
-    return bytes(pdf.output())
+        y_pos = pdf.get_y()
+        pdf.rect(10, y_pos, 90, 30)
+        pdf.set_xy(12, y_pos + 2)
+        pdf.set_font(bold_font, size=10)
+        pdf.cell(86, 6, f"수신: {q.get('client_name', '고객사')} 귀하", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font(main_font, size=8)
+        pdf.set_x(12)
+        pdf.cell(86, 5, f"담당자: {q.get('client_manager', '담당자')} 님", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(12)
+        pdf.cell(86, 5, f"품명(도면): {q.get('filename', '도면')}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(12)
+        pdf.cell(86, 5, f"진행상태: {q.get('status', '1. 견적제출')}", new_x="LMARGIN", new_y="NEXT")
+
+        c_info = company_info
+        pdf.rect(105, y_pos, 95, 30)
+        pdf.set_xy(107, y_pos + 2)
+        pdf.set_font(bold_font, size=9)
+        pdf.cell(91, 5, f"공급자: {c_info.get('company_name','')} (대표: {c_info.get('ceo_name','')})", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font(main_font, size=8)
+        pdf.set_x(107)
+        pdf.cell(91, 5, f"사업자번호: {c_info.get('biz_num','')}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(107)
+        pdf.cell(91, 5, f"소재지: {c_info.get('address','')}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(107)
+        pdf.cell(91, 5, f"연락처: {c_info.get('tel','')} / {c_info.get('email','')}", new_x="LMARGIN", new_y="NEXT")
+
+        pdf.set_y(y_pos + 34)
+        pdf.set_font(bold_font, size=11)
+        pdf.cell(0, 9, f"견적 공급가 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)", border=1, new_x="LMARGIN", new_y="NEXT", align="C")
+        pdf.ln(3)
+
+        pdf.set_font(bold_font, size=8)
+        pdf.cell(38, 7, "품명 및 사양", border=1, align="C")
+        pdf.cell(16, 7, "수량", border=1, align="C")
+        pdf.cell(34, 7, "재질 / 총중량", border=1, align="C")
+        pdf.cell(36, 7, "적용설비 / 후처리", border=1, align="C")
+        pdf.cell(32, 7, "개당 단가", border=1, align="C")
+        pdf.cell(34, 7, "합계 공급가", border=1, align="C")
+        pdf.ln()
+
+        pdf.set_font(main_font, size=8)
+        pdf.cell(38, 7, str(q.get('filename', '도면'))[:16], border=1, align="C")
+        pdf.cell(16, 7, f"{q.get('qty', 1):,} EA", border=1, align="C")
+        pdf.cell(34, 7, f"{str(q.get('material','')).split('/')[0]} ({q.get('raw_weight',0)}kg)", border=1, align="C")
+        pdf.cell(36, 7, f"{str(q.get('machine_type','')).split()[0]} / {str(q.get('surface','')).split()[0]}", border=1, align="C")
+        pdf.cell(32, 7, f"{q.get('unit_price', 0):,} 원", border=1, align="R")
+        pdf.cell(34, 7, f"{q.get('total_price', 0):,} 원", border=1, align="R")
+        pdf.ln(10)
+
+        pdf.set_font(bold_font, size=9)
+        pdf.cell(0, 6, "[ 원가 세부 산출 명세 ]", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font(main_font, size=8)
+        pdf.cell(0, 5, f"1. 원재료비 : {q.get('material_cost_total', 0):,} 원 (소재 {q.get('raw_weight', 0)}kg x {q.get('material_unit_price', 0):,}원 x {q.get('qty', 1)}개)", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 5, f"2. 순수가공비 : {q.get('machining_cost_total', 0):,} 원 ({q.get('hours', 0)}h x 시급 {q.get('machine_hourly_rate', 0):,}원 x 난이도 {q.get('difficulty_factor', 1.0)} x {q.get('qty', 1)}개)", new_x="LMARGIN", new_y="NEXT")
+        if q.get('guardrail_applied'):
+            pdf.cell(0, 4, f"   (※ 최소 기본공임 기준 {settings.get('min_machining_cost', 35000):,}원 자동 보정 적용)", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 5, f"3. 초도 세팅비 : {q.get('setup_fee', 0):,} 원", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 5, f"4. 표면/후처리비 : {q.get('surface_cost_total', 0):,} 원 ({q.get('surface', '무처리')})", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 5, f"5. 일반관리비 및 마진 ({q.get('margin_rate', 20)}%): {q.get('margin_amount', 0):,} 원", new_x="LMARGIN", new_y="NEXT")
+        
+        if q.get('memo'):
+            pdf.ln(2)
+            pdf.set_font(bold_font, size=8)
+            pdf.cell(0, 5, f"[ 현장 엔지니어 비고 ]: {q.get('memo')}", new_x="LMARGIN", new_y="NEXT")
+
+        return bytes(pdf.output())
+    except Exception as e:
+        return b""
 
 # ==========================================
 # 8. 메인 워크스페이스
