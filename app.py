@@ -4,7 +4,7 @@ import streamlit as st
 # [중요] 최상단 와이드 레이아웃 강제 지정
 # ==========================================
 st.set_page_config(
-    page_title="Costify | 정밀 절삭가공 견적 & MES",
+    page_title="Costify | 정밀 절삭가공 AI 견적 시스템",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -57,12 +57,12 @@ SYSTEM_RELEASE_NOTES = [
     {
         "version": "v2.6.0",
         "date": "2026-10-28",
-        "title": "카카오 알림톡(1단계) 및 국세청 전자세금계산서(3단계) 연동 엔진 탑재",
+        "title": "카카오톡 알림 및 국세청 전자세금계산서 연동 엔진 탑재",
         "details": [
             "알이고(Aligo) 규격 카카오 알림톡 엔진 연동 (견적서 발송, 공정단계 변경 알림, 납기 안내)",
             "팝빌(Popbill) 규격 국세청 전자세금계산서 원클릭 발행 및 국세청 전송 상태 관리 연동",
             "API 실무 키 검증 전에도 전체 워크플로우를 테스트할 수 있는 시뮬레이션(테스트) 모드 지원",
-            "견적 상세 검수 및 MES 공정 화면에 알림톡/세금계산서 액션 버튼 배치",
+            "견적 상세 검수 및 공정 화면에 카카오톡/세금계산서 액션 버튼 배치",
             "시스템 설정 탭에 외부 API 연동 센터 신설 및 감사 로그 영구 기록 연동"
         ]
     }
@@ -91,7 +91,7 @@ DEFAULT_STAGE_CONFIG = {
 
 DEFAULT_SETTINGS = {
     "company_info": {
-        "company_name": "Costify 본사 마스터 공장",
+        "company_name": "Costify 본사 마스터",
         "biz_num": "123-45-67890",
         "ceo_name": "홍길동",
         "tel": "031-123-4567",
@@ -138,7 +138,7 @@ DEFAULT_SETTINGS = {
 
 DEFAULT_COMPANIES = {
     "master_workspace": {
-        "name": "Costify 본사 마스터",
+        "name": "Costify 본사",
         "created_at": "2026-10-25"
     }
 }
@@ -205,7 +205,7 @@ companies_db = load_json(COMPANIES_META_FILE, DEFAULT_COMPANIES)
 users_db = load_json(USERS_FILE, DEFAULT_USERS)
 
 if "master_workspace" not in companies_db:
-    companies_db["master_workspace"] = {"name": "Costify 본사 마스터", "created_at": "2026-10-25"}
+    companies_db["master_workspace"] = {"name": "Costify 본사", "created_at": "2026-10-25"}
     save_json(COMPANIES_META_FILE, companies_db)
 
 if "admin" in users_db:
@@ -534,7 +534,7 @@ if not st.session_state["auth_user"]:
         st.markdown("""
         <div style="text-align:center; margin-bottom:20px;">
             <div style="font-size:26px; font-weight:800; color:#1976D2; letter-spacing:0.5px;">COSTIFY PORTAL</div>
-            <div style="font-size:13px; color:#565656; margin-top:4px;">정밀 절삭가공 표준 원가 산출 및 MES 워크스페이스</div>
+            <div style="font-size:13px; color:#565656; margin-top:4px;">정밀 절삭가공 표준 원가 산출 워크스페이스</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -858,7 +858,7 @@ with st.sidebar:
                     st.rerun()
 
 # ==========================================
-# 7. 초고속 Gemini 2.5 Flash 도면 분석 & 100% 실도면 캡처 썸네일 생성
+# 7. 초고속 Gemini 3.5 Flash 도면 분석 & 100% 실도면 캡처 썸네일 생성
 # ==========================================
 def generate_real_drawing_thumbnail_b64(file_bytes, mime_type):
     """업로드된 실제 도면(PDF/이미지)의 1페이지를 320x160 썸네일로 캡처하여 Base64 반환"""
@@ -912,7 +912,7 @@ def analyze_drawing_gemini(api_key, file_bytes, mime_type, filename, engineer_pr
     for attempt in range(2):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
                 contents=[doc_part, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
@@ -1182,7 +1182,7 @@ def render_veteran_detail_view(quote_id):
         st.markdown('</div>', unsafe_allow_html=True)
 
     with det_r:
-        st.markdown('<div class="panel-card"><div class="panel-title">2. 원가 마진 분석 및 알림톡/세금계산서 연동</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-card"><div class="panel-title">2. 원가 마진 분석 및 카카오톡/세금계산서 연동</div>', unsafe_allow_html=True)
         
         pr1, pr2 = st.columns(2)
         with pr1:
@@ -1522,7 +1522,7 @@ else:
                             st.rerun()
 
     # ------------------------------------------
-    # TAB 2: 신규 견적 산출 (Google Gemini 2.5 Flash 엔진)
+    # TAB 2: 신규 견적 산출 (Google Gemini 3.5 Flash 엔진)
     # ------------------------------------------
     with tabs[1]:
         if "client_name_val" not in st.session_state: st.session_state["client_name_val"] = "(주)한국정밀"
@@ -1573,7 +1573,7 @@ else:
                             file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                             open_in_new_tab_button(uploaded_file.getvalue(), file_mime, label="도면 새 창 열기")
                     with col_b2:
-                        start_ai = st.button("⚡ AI 분석 실행 (Gemini Flash)", type="primary", use_container_width=True)
+                        start_ai = st.button("⚡ AI 분석 실행", type="primary", use_container_width=True)
 
                     if start_ai:
                         if not uploaded_file:
@@ -1584,7 +1584,7 @@ else:
                             clean_name = os.path.splitext(uploaded_file.name)[0]
                             st.session_state["custom_part_name"] = clean_name
                             
-                            with st.spinner("⚡ Gemini 2.5 Flash 도면 정밀 분석 중... (약 2초)"):
+                            with st.spinner("⚡ 도면 정밀 분석 중... (약 10초)"):
                                 file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                                 file_bytes = uploaded_file.getvalue()
                                 
@@ -1912,7 +1912,7 @@ else:
                                         old_st = orders_db[real_idx]["status"]
                                         orders_db[real_idx]["status"] = new_status
                                         orders_db[real_idx]["memo"] = new_memo
-                                        log_audit(active_cid, logged_user["name"], "MES 공정 변경", f"[{o.get('quote_no')}] {o.get('filename')}", f"{old_st} ➔ {new_status}")
+                                        log_audit(active_cid, logged_user["name"], "공정 변경", f"[{o.get('quote_no')}] {o.get('filename')}", f"{old_st} ➔ {new_status}")
                                         break
                                 save_tenant_data(active_cid, "orders_database.json", orders_db)
                                 st.success("저장 완료")
