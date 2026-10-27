@@ -17,27 +17,19 @@ from datetime import datetime, timedelta
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.3.0"
+CURRENT_SYSTEM_VERSION = "v2.4.0"
 
 SYSTEM_RELEASE_NOTES = [
     {
-        "version": "v2.3.0",
+        "version": "v2.4.0",
         "date": "2026-10-27",
-        "title": "Zumen 엔터프라이즈 디자인 시스템 전면 이식",
+        "title": "Zumen 3단 분할 레이아웃(좌측 필터 레일 + 견적 카드/테이블) 개편",
         "details": [
-            "Zumen 표준 시그니처 블루(#1976D2) TopNav 헤더 및 소프트 캔버스(#f6f6f6) 적용",
-            "CAD 도면 및 견적서 열람에 최적화된 고대비 카드 및 인풋 컴포넌트 탑재",
-            "파스텔톤 공정 상태 배지 및 AG-Grid 감성의 정밀 원가 명세 테이블 구축",
-            "기존 멀티테넌트, 다중 도면 일괄 분석, 프롬프트 지침 기능 100% 호환 보존"
-        ]
-    },
-    {
-        "version": "v2.2.0",
-        "date": "2026-10-26",
-        "title": "다중 도면 일괄 견적, 프롬프트 매칭 및 품명 편집 기능 탑재",
-        "details": [
-            "도면 다중 선택 일괄 분석 및 프로그레스 바 연동",
-            "현장 엔지니어 특이사항 프롬프트 매칭 엔진 탑재"
+            "좌측 고정 필터 레일(고객사, 소재, 설비, 상태, 정렬) 및 원클릭 초기화 탑재",
+            "상단 전역 자유어 실시간 검색창(견적번호, 품명, 고객사, 메모 통합) 구축",
+            "도면 나열 대신 정밀 견적 전용 카드 그리드 및 정돈된 테이블 뷰 지원",
+            "상단 실시간 견적 총액/품목수 KPI 집계 리본 탑재",
+            "기존 AI 비전 3단 폴백, 프롬프트 지침, 다중 도면 일괄 분석 기능 유지"
         ]
     }
 ]
@@ -183,12 +175,9 @@ st.set_page_config(page_title="Costify | 정밀 절삭가공 견적 & MES", page
 
 st.markdown("""
 <style>
-    /* Zumen 디자인 토큰 주입 */
     :root, html, body {
         color-scheme: light !important;
         --zm-primary: #1976D2;
-        --zm-primary-hover: #176FC5;
-        --zm-primary-subtle: #E9F4FF;
         --zm-surface: #ffffff;
         --zm-surface-app: #f6f6f6;
         --zm-border: #cccccc;
@@ -196,25 +185,22 @@ st.markdown("""
         --zm-text-muted: #565656;
     }
 
-    /* 전역 앱 캔버스 배경 */
     .stApp {
         background-color: #f6f6f6 !important;
         color: #111111 !important;
-        font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", "Segoe UI", Roboto, sans-serif !important;
+        font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", Roboto, sans-serif !important;
     }
 
-    /* 사이드바 깔끔한 화이트 스타일링 */
     [data-testid="stSidebar"] {
         background-color: #ffffff !important;
         border-right: 1px solid #e0e0e0 !important;
     }
 
-    /* Zumen 카드 패널 */
     .panel-card {
         background: #ffffff !important;
         border: 1px solid #dcdcdc !important;
         border-radius: 6px !important;
-        padding: 18px 20px !important;
+        padding: 16px 18px !important;
         margin-bottom: 14px !important;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
     }
@@ -222,84 +208,109 @@ st.markdown("""
         color: #1976D2 !important;
         font-size: 13.5px !important;
         font-weight: 700 !important;
-        letter-spacing: 0.3px !important;
         margin-bottom: 14px !important;
         border-bottom: 1px solid #e6e6e6 !important;
         padding-bottom: 8px !important;
-        display: flex;
-        align-items: center;
-        gap: 6px;
     }
 
-    /* 폼 라벨 시인성 */
+    /* 좌측 필터 레일 (Rail) 스타일 */
+    .filter-rail {
+        background: #ffffff;
+        border: 1px solid #dcdcdc;
+        border-radius: 6px;
+        padding: 16px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        margin-bottom: 16px;
+    }
+    .filter-rail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13.5px;
+        font-weight: 700;
+        color: #111111;
+        margin-bottom: 12px;
+        border-bottom: 1px solid #e6e6e6;
+        padding-bottom: 8px;
+    }
+
+    /* 견적 카드 (Quote Card) */
+    .quote-card {
+        background: #ffffff;
+        border: 1px solid #dcdcdc;
+        border-radius: 6px;
+        padding: 14px 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+    }
+    .quote-card:hover {
+        border-color: #1976D2;
+        box-shadow: 0 2px 8px rgba(25, 118, 210, 0.15);
+    }
+    .quote-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    .quote-card-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #111111;
+    }
+    .quote-card-client {
+        font-size: 13px;
+        color: #565656;
+        margin-bottom: 8px;
+    }
+    .quote-card-price {
+        font-size: 19px;
+        font-weight: 800;
+        color: #1976D2;
+        margin-bottom: 6px;
+    }
+    .quote-card-specs {
+        font-size: 12px;
+        color: #777777;
+        line-height: 1.5;
+        border-top: 1px dashed #e6e6e6;
+        padding-top: 8px;
+        margin-top: 8px;
+    }
+
+    /* 폼 라벨 및 인풋 */
     label, .stWidgetLabel p, .stWidgetLabel span {
         color: #333333 !important;
         font-weight: 600 !important;
-        font-size: 13px !important;
+        font-size: 12.5px !important;
     }
-
-    /* 인풋 컨트롤 (Zumen 스펙 준수) */
     input, textarea {
         background-color: #ffffff !important;
         color: #111111 !important;
         border: 1px solid #cccccc !important;
         border-radius: 4px !important;
-        font-size: 13.5px !important;
+        font-size: 13px !important;
     }
     input:focus, textarea:focus {
         border-color: #1976D2 !important;
         box-shadow: 0 0 0 1px #1976D2 !important;
     }
 
-    /* 날짜창 및 셀렉트박스 */
     [data-testid="stDateInput"] div[data-baseweb="input"], [data-baseweb="select"] > div {
         background-color: #ffffff !important;
         border: 1px solid #cccccc !important;
         border-radius: 4px !important;
         color: #111111 !important;
     }
-    [data-testid="stDateInput"] input {
-        color: #111111 !important;
-    }
 
-    /* 넘버 인풋 증감 버튼 */
-    [data-testid="stNumberInput"] button {
-        background-color: #f6f6f6 !important;
-        color: #333333 !important;
-        border-color: #cccccc !important;
-    }
-    [data-testid="stNumberInput"] button:hover {
-        background-color: #E9F4FF !important;
-        color: #1976D2 !important;
-    }
-
-    /* 파일 업로더 드롭존 */
-    [data-testid="stFileUploaderDropzone"] {
-        background-color: #fbfbfb !important;
-        border: 1px dashed #b0b0b0 !important;
-        border-radius: 6px !important;
-    }
-    [data-testid="stFileUploaderDropzone"] button {
-        background-color: #ffffff !important;
-        color: #1976D2 !important;
-        border: 1px solid #1976D2 !important;
-        font-weight: 700 !important;
-    }
-
-    /* 버튼 스타일 (Zumen Primary Blue #1976D2) */
     button[kind="primary"] {
         background-color: #1976D2 !important;
         color: #ffffff !important;
         border: 1px solid #1976D2 !important;
         font-weight: 700 !important;
         border-radius: 4px !important;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
-        transition: background-color 150ms ease-out !important;
     }
-    button[kind="primary"]:hover {
-        background-color: #176FC5 !important;
-    }
-
     button[kind="secondary"] {
         background-color: #ffffff !important;
         color: #333333 !important;
@@ -307,12 +318,7 @@ st.markdown("""
         font-weight: 600 !important;
         border-radius: 4px !important;
     }
-    button[kind="secondary"]:hover {
-        background-color: #f6f6f6 !important;
-        border-color: #999999 !important;
-    }
 
-    /* 탭 메뉴 (Zumen 탭 스타일) */
     .stTabs [data-baseweb="tab-list"] {
         gap: 16px;
         background-color: #ffffff !important;
@@ -329,44 +335,31 @@ st.markdown("""
     .stTabs [aria-selected="true"] {
         color: #1976D2 !important;
         border-bottom: 2px solid #1976D2 !important;
-        background-color: transparent !important;
-        font-weight: 700 !important;
     }
 
     /* 메트릭 박스 */
     .metric-container {
-        background: #f8fafc;
+        background: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 6px;
-        padding: 14px 16px;
-        margin-bottom: 8px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     }
-    .metric-label { color: #64748b; font-size: 12px; font-weight: 600; }
-    .metric-val { color: #0f172a; font-size: 23px; font-weight: 700; margin-top: 2px; }
-    
-    .guardrail-alert {
-        background-color: #FFF3E0;
-        border: 1px solid #DD6B20;
-        border-radius: 4px;
-        padding: 10px 14px;
-        color: #A65018;
-        font-size: 12.5px;
-        line-height: 1.5;
-        margin-bottom: 12px;
-    }
+    .metric-label { color: #64748b; font-size: 11.5px; font-weight: 600; }
+    .metric-val { color: #0f172a; font-size: 20px; font-weight: 700; margin-top: 2px; }
 
-    /* 캘린더 그리드 스타일 */
     .cal-header {
         background-color: #eeeeee;
         color: #333333;
-        padding: 9px;
+        padding: 8px;
         text-align: center;
         font-weight: 700;
         border: 1px solid #dcdcdc;
         font-size: 12px;
     }
     .cal-day-cell {
-        min-height: 98px;
+        min-height: 95px;
         background-color: #ffffff;
         border: 1px solid #dcdcdc;
         padding: 6px;
@@ -377,9 +370,9 @@ st.markdown("""
     .cal-badge {
         font-size: 11px;
         font-weight: 600;
-        padding: 3px 6px;
+        padding: 2px 5px;
         border-radius: 3px;
-        margin-top: 4px;
+        margin-top: 3px;
         display: block;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -458,15 +451,19 @@ clients_db = load_tenant_data(active_cid, "clients_directory.json", [
 ])
 
 # ==========================================
-# 4. Zumen 스타일 상단 탑바(TopNav) & 스위처
+# 4. Zumen 스타일 상단 탑바(TopNav) & 자유어 검색창
 # ==========================================
 user_last_seen = users_db.get(current_user_id, {}).get("last_seen_version", "")
 has_new_update = (user_last_seen != CURRENT_SYSTEM_VERSION)
 
-# Zumen 탑바 HTML 컴포넌트
+# 전역 자유어 검색 상태 세션 초기화
+if "global_search_keyword" not in st.session_state:
+    st.session_state["global_search_keyword"] = ""
+
+# 1. Zumen TopNav 헤더 배너
 st.markdown(f"""
-<div style="background-color:#1976D2; height:48px; display:flex; align-items:center; padding:0 18px; border-radius:6px; margin-bottom:12px; color:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.12);">
-    <div style="font-size:18px; font-weight:800; letter-spacing:0.02em; margin-right:24px; display:flex; align-items:center; gap:6px;">
+<div style="background-color:#1976D2; height:48px; display:flex; align-items:center; padding:0 18px; border-radius:6px; margin-bottom:10px; color:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.12);">
+    <div style="font-size:18px; font-weight:800; letter-spacing:0.02em; margin-right:20px; display:flex; align-items:center; gap:6px;">
         <span>⚙️</span> COSTIFY
     </div>
     <div style="font-size:13px; font-weight:600; background:rgba(255,255,255,0.2); padding:3px 10px; border-radius:4px;">
@@ -478,12 +475,20 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 상단 유틸리티 바 (업체 전환, 릴리즈 노트, 로그아웃)
-ctrl_left, ctrl_right = st.columns([2.5, 2.5])
-with ctrl_left:
-    st.caption(f"시스템 버전: **{CURRENT_SYSTEM_VERSION}** (Zumen UI Spec 준수)")
+# 2. 상단 유틸리티 검색 및 스위처 바
+u_col1, u_col2 = st.columns([2.8, 2.2])
+with u_col1:
+    search_input = st.text_input(
+        "자유어 검색",
+        value=st.session_state["global_search_keyword"],
+        placeholder="🔍 자유어 검색 (견적번호, 품명, 고객사, 소재, 비고 메모 등)",
+        label_visibility="collapsed"
+    )
+    if search_input != st.session_state["global_search_keyword"]:
+        st.session_state["global_search_keyword"] = search_input
+        st.rerun()
 
-with ctrl_right:
+with u_col2:
     if is_super_admin:
         sw_c, rel_c, btn_c = st.columns([2, 1.2, 1])
         with sw_c:
@@ -560,7 +565,7 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     components.html(js_code, height=44)
 
 # ==========================================
-# 5. 사이드바: 퀵 툴박스 (Zumen 레일 스타일)
+# 5. 사이드바: 퀵 툴박스
 # ==========================================
 def get_secure_api_key():
     try:
@@ -845,97 +850,192 @@ def create_formal_pdf(q, company_info):
 
     return bytes(pdf.output())
 
-def create_consolidated_batch_pdf(items_list, company_info, client_name, client_manager, due_date):
-    pdf = FPDF(format="A4")
-    pdf.add_page()
-    selected_font, selected_bold = get_pdf_fonts()
-    if selected_font:
-        pdf.add_font("KoreanFont", "", selected_font)
-        pdf.add_font("KoreanFontB", "", selected_bold)
-        main_font, bold_font = "KoreanFont", "KoreanFontB"
-    else:
-        main_font, bold_font = "helvetica", "helvetica"
-
-    now_str = datetime.now().strftime("%Y-%m-%d")
-    batch_quote_no = f"QT-SET-{datetime.now().strftime('%Y%m%d%H%M')}"
-    total_batch_price = sum(it.get("total_price", 0) for it in items_list)
-
-    pdf.set_font(bold_font, size=18)
-    pdf.cell(0, 12, "통 합 가 공 견 적 서", ln=True, align="C")
-    pdf.ln(3)
-
-    pdf.set_font(main_font, size=9)
-    pdf.cell(95, 6, f"견적번호: {batch_quote_no}", ln=False)
-    pdf.cell(95, 6, f"발행일자: {now_str}", ln=True, align="R")
-    pdf.cell(95, 6, "유효기간: 발행일로부터 15일간", ln=False)
-    pdf.cell(95, 6, f"납기요청일: {due_date}", ln=True, align="R")
-    pdf.ln(2)
-
-    y_pos = pdf.get_y()
-    pdf.rect(10, y_pos, 90, 26)
-    pdf.set_xy(12, y_pos + 2)
-    pdf.set_font(bold_font, size=10)
-    pdf.cell(86, 6, f"수신: {client_name} 귀하", ln=True)
-    pdf.set_font(main_font, size=8)
-    pdf.set_x(12)
-    pdf.cell(86, 5, f"담당자: {client_manager} 님", ln=True)
-    pdf.set_x(12)
-    pdf.cell(86, 5, f"발주 구성: 정밀 가공품 총 {len(items_list)}종 일괄", ln=True)
-
-    c_info = company_info
-    pdf.rect(105, y_pos, 95, 26)
-    pdf.set_xy(107, y_pos + 2)
-    pdf.set_font(bold_font, size=9)
-    pdf.cell(91, 5, f"공급자: {c_info.get('company_name','')} (대표: {c_info.get('ceo_name','')})", ln=True)
-    pdf.set_font(main_font, size=8)
-    pdf.set_x(107)
-    pdf.cell(91, 5, f"사업자번호: {c_info.get('biz_num','')}", ln=True)
-    pdf.set_x(107)
-    pdf.cell(91, 5, f"연락처: {c_info.get('tel','')} / {c_info.get('email','')}", ln=True)
-
-    pdf.set_y(y_pos + 30)
-    pdf.set_font(bold_font, size=11)
-    pdf.cell(0, 9, f"견적 공급가 총계: 일금 {total_batch_price:,} 원정 (VAT 별도)", border=1, ln=True, align="C")
-    pdf.ln(3)
-
-    pdf.set_font(bold_font, size=8)
-    pdf.cell(10, 7, "No", border=1, align="C")
-    pdf.cell(46, 7, "품명 및 사양", border=1, align="C")
-    pdf.cell(18, 7, "수량", border=1, align="C")
-    pdf.cell(38, 7, "재질 / 설비", border=1, align="C")
-    pdf.cell(38, 7, "단가 (개당)", border=1, align="C")
-    pdf.cell(40, 7, "공급가액", border=1, align="C")
-    pdf.ln()
-
-    pdf.set_font(main_font, size=8)
-    for idx, item in enumerate(items_list, start=1):
-        pdf.cell(10, 7, str(idx), border=1, align="C")
-        pdf.cell(46, 7, str(item.get("filename", "도면"))[:20], border=1, align="C")
-        pdf.cell(18, 7, f"{item.get('qty', 1):,} EA", border=1, align="C")
-        pdf.cell(38, 7, f"{str(item.get('material','')).split('/')[0]} / {str(item.get('machine_type','')).split()[0]}", border=1, align="C")
-        pdf.cell(38, 7, f"{item.get('unit_price', 0):,} 원", border=1, align="R")
-        pdf.cell(40, 7, f"{item.get('total_price', 0):,} 원", border=1, align="R")
-        pdf.ln()
-
-    pdf.ln(4)
-    pdf.set_font(bold_font, size=9)
-    pdf.cell(0, 6, "[ 품목별 산출 근거 및 현장 비고 ]", ln=True)
-    pdf.set_font(main_font, size=8)
-    for idx, item in enumerate(items_list, start=1):
-        m_txt = item.get("memo") or "특이사항 없음"
-        pdf.cell(0, 5, f"{idx}. {item.get('filename')}: {m_txt}", ln=True)
-
-    return bytes(pdf.output())
-
 # ==========================================
 # 8. 메인 워크스페이스
 # ==========================================
-tabs = st.tabs(["실시간 견적 산출", "공정흐름 관리 (MES)", "납기 캘린더", "그룹 발주 관리", "시스템 설정"])
+tabs = st.tabs(["견적 대시보드 (목록)", "신규 견적 산출", "공정흐름 관리 (MES)", "납기 캘린더", "시스템 설정"])
 
 # ------------------------------------------
-# TAB 1: 실시간 견적 산출 (Zumen 상세 뷰)
+# TAB 1: 견적 대시보드 (Zumen 3단 분할 레이아웃)
 # ------------------------------------------
 with tabs[0]:
+    # 세션 뷰 모드 관리 (카드형 vs 목록형)
+    if "quote_view_mode" not in st.session_state:
+        st.session_state["quote_view_mode"] = "카드형 (미리보기)"
+
+    rail_col, main_col = st.columns([1, 3.2], gap="large")
+
+    # 1. 좌측 필터 레일 (Left Rail)
+    with rail_col:
+        st.markdown("""
+        <div class="filter-rail-header">
+            <span>⚙️ 견적 필터</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("모두 지우기", use_container_width=True):
+            st.session_state["global_search_keyword"] = ""
+            st.session_state["f_client"] = "전체"
+            st.session_state["f_material"] = "전체"
+            st.session_state["f_machine"] = "전체"
+            st.session_state["f_stage"] = "전체"
+            st.session_state["f_sort"] = "최신 등록순"
+            st.rerun()
+
+        # 거래처 필터
+        all_clients = ["전체"] + sorted(list({o.get("client_name") for o in orders_db if o.get("client_name")}))
+        f_client = st.selectbox("고객사(발주처)", all_clients, key="f_client")
+
+        # 소재 필터
+        all_materials = ["전체"] + list(settings["materials"].keys())
+        f_material = st.selectbox("소재 재질", all_materials, key="f_material")
+
+        # 설비 필터
+        all_machines = ["전체"] + list(settings["machines"].keys())
+        f_machine = st.selectbox("가공 설비", all_machines, key="f_machine")
+
+        # 공정 상태 필터
+        all_stages = ["전체"] + PROCESS_STAGES
+        f_stage = st.selectbox("공정 진행 상태", all_stages, key="f_stage")
+
+        # 정렬 순서
+        f_sort = st.selectbox(
+            "정렬 기준",
+            ["최신 등록순", "과거 등록순", "견적금액 높은순", "납기 임박순"],
+            key="f_sort"
+        )
+
+    # 2. 메인 캔버스: 견적 목록 렌더링
+    with main_col:
+        # 데이터 필터링 연산
+        filtered_orders = orders_db.copy()
+
+        # 전역 자유어 검색
+        kw = st.session_state["global_search_keyword"].strip().lower()
+        if kw:
+            filtered_orders = [
+                o for o in filtered_orders
+                if kw in str(o.get("quote_no", "")).lower()
+                or kw in str(o.get("filename", "")).lower()
+                or kw in str(o.get("client_name", "")).lower()
+                or kw in str(o.get("material", "")).lower()
+                or kw in str(o.get("machine_type", "")).lower()
+                or kw in str(o.get("memo", "")).lower()
+            ]
+
+        # 레일 필터
+        if f_client != "전체":
+            filtered_orders = [o for o in filtered_orders if o.get("client_name") == f_client]
+        if f_material != "전체":
+            filtered_orders = [o for o in filtered_orders if o.get("material") == f_material]
+        if f_machine != "전체":
+            filtered_orders = [o for o in filtered_orders if o.get("machine_type") == f_machine]
+        if f_stage != "전체":
+            filtered_orders = [o for o in filtered_orders if o.get("status") == f_stage]
+
+        # 정렬 로직
+        if f_sort == "최신 등록순":
+            filtered_orders.sort(key=lambda x: str(x.get("id", "")), reverse=True)
+        elif f_sort == "과거 등록순":
+            filtered_orders.sort(key=lambda x: str(x.get("id", "")))
+        elif f_sort == "견적금액 높은순":
+            filtered_orders.sort(key=lambda x: x.get("total_price", 0), reverse=True)
+        elif f_sort == "납기 임박순":
+            filtered_orders.sort(key=lambda x: str(x.get("due_date", "9999-99-99")))
+
+        # 상단 리본: 집계 및 뷰 토글
+        h_left, h_right = st.columns([2.5, 2])
+        with h_left:
+            st.markdown(f"#### 견적 관리 <span style='font-size:14px; font-weight:400; color:#565656;'>(전체 {len(filtered_orders)}건)</span>", unsafe_allow_html=True)
+        with h_right:
+            v_col1, v_col2 = st.columns([1.5, 1.5])
+            with v_col1:
+                view_mode = st.radio("보기", ["카드형 (미리보기)", "목록형 (테이블)"], horizontal=True, label_visibility="collapsed", key="v_toggle")
+            with v_col2:
+                if st.button("+ 신규 견적 산출", type="primary", use_container_width=True):
+                    st.info("상단 두 번째 탭 [신규 견적 산출]로 이동하여 도면을 업로드하세요.")
+
+        # KPI 요약 리본 (실무형 강화)
+        tot_sum = sum(o.get("total_price", 0) for o in filtered_orders)
+        tot_qty = sum(o.get("qty", 1) for o in filtered_orders)
+        today_date = datetime.today().date()
+        late_count = sum(1 for o in filtered_orders if o.get("status") != "7. 출하완료" and o.get("due_date") and datetime.strptime(o.get("due_date"), "%Y-%m-%d").date() < today_date)
+
+        m1, m2, m3 = st.columns(3)
+        with m1:
+            st.markdown(f'<div class="metric-container"><div class="metric-label">조회 견적 총액 (공급가)</div><div class="metric-val" style="color:#1976D2;">{tot_sum:,} 원</div></div>', unsafe_allow_html=True)
+        with m2:
+            st.markdown(f'<div class="metric-container"><div class="metric-label">총 발주 물량 (수량)</div><div class="metric-val">{tot_qty:,} EA</div></div>', unsafe_allow_html=True)
+        with m3:
+            color_late = "#DA4D3A" if late_count > 0 else "#236542"
+            st.markdown(f'<div class="metric-container"><div class="metric-label">납기 지연 / 위험 건수</div><div class="metric-val" style="color:{color_late};">{late_count} 건</div></div>', unsafe_allow_html=True)
+
+        if not filtered_orders:
+            st.info("검색 및 필터 조건에 일치하는 등록 견적이 없습니다.")
+        else:
+            # 1) 카드형 뷰 (Zumen Card Grid)
+            if view_mode == "카드형 (미리보기)":
+                card_cols = st.columns(2)
+                for idx, o in enumerate(filtered_orders):
+                    c_target = card_cols[idx % 2]
+                    st_name = o.get("status", "1. 견적제출")
+                    conf = STAGE_CONFIG.get(st_name, {"bg": "#E9F4FF", "color": "#1667B8", "name": st_name})
+                    
+                    with c_target:
+                        st.markdown(f"""
+                        <div class="quote-card">
+                            <div class="quote-card-header">
+                                <span class="quote-card-title">{o.get('filename')}</span>
+                                <span style="background:{conf['bg']}; color:{conf['color']}; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700;">
+                                    {conf['name']}
+                                </span>
+                            </div>
+                            <div class="quote-card-client">
+                                🏢 {o.get('client_name')} (견적번호: <b>{o.get('quote_no')}</b>)
+                            </div>
+                            <div class="quote-card-price">
+                                {o.get('total_price', 0):,} 원 <span style="font-size:13px; font-weight:400; color:#565656;">(개당 {o.get('unit_price', 0):,}원 x {o.get('qty', 1):,}EA)</span>
+                            </div>
+                            <div class="quote-card-specs">
+                                ⚙️ <b>설비</b>: {str(o.get('machine_type','')).split()[0]} | <b>재질</b>: {str(o.get('material','')).split('/')[0]} ({o.get('raw_weight',0)}kg)<br>
+                                📅 <b>납기일</b>: {o.get('due_date', '-')} | <b>시간</b>: {o.get('hours',0)}h
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # 카드 하단 액션 버튼
+                        pdf_d = create_formal_pdf(o, settings["company_info"])
+                        st.download_button(
+                            f"📄 [{o.get('filename')[:10]}] PDF 견적서",
+                            data=pdf_d,
+                            file_name=f"{o.get('quote_no')}_{o.get('filename')}.pdf",
+                            mime="application/pdf",
+                            key=f"card_pdf_{o['id']}_{idx}",
+                            use_container_width=True
+                        )
+
+            # 2) 목록형 뷰 (Zumen AG-Grid Style Table)
+            else:
+                table_rows = []
+                for o in filtered_orders:
+                    table_rows.append({
+                        "견적번호": o.get("quote_no"),
+                        "품명/도면": o.get("filename"),
+                        "고객사": o.get("client_name"),
+                        "상태": o.get("status"),
+                        "수량": f"{o.get('qty', 1):,} EA",
+                        "개당단가": f"{o.get('unit_price', 0):,} 원",
+                        "총 견적가": f"{o.get('total_price', 0):,} 원",
+                        "적용소재": str(o.get("material", "")).split("/")[0],
+                        "가공설비": str(o.get("machine_type", "")).split()[0],
+                        "납기일": o.get("due_date", "-")
+                    })
+                st.dataframe(pd.DataFrame(table_rows), hide_index=True, use_container_width=True)
+
+# ------------------------------------------
+# TAB 2: 신규 견적 산출 (도면 업로드 & AI 분석)
+# ------------------------------------------
+with tabs[1]:
     if "client_name_val" not in st.session_state: st.session_state["client_name_val"] = "(주)한국정밀"
     if "client_mgr_val" not in st.session_state: st.session_state["client_mgr_val"] = "김철수 부장"
     if "custom_part_name" not in st.session_state: st.session_state["custom_part_name"] = "BRACKET-M01"
@@ -949,7 +1049,6 @@ with tabs[0]:
     left_col, right_col = st.columns([1.15, 0.85], gap="large")
 
     with left_col:
-        # 카드 1: 발주 기본 정보
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">1. 발주 기본 정보</div>', unsafe_allow_html=True)
             c1, c2 = st.columns(2)
@@ -961,7 +1060,6 @@ with tabs[0]:
                 due_date = st.date_input("납기 요청일", value=datetime.today() + timedelta(days=12))
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # 카드 2: 도면 파일 등록 & 엔지니어 프롬프트
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">2. 도면 파일 및 가공 지침 (프롬프트)</div>', unsafe_allow_html=True)
             quote_mode = st.radio("모드 선택", ["AI 비전 도면 자동 판독", "수동 직접 입력"], horizontal=True, label_visibility="collapsed")
@@ -976,7 +1074,7 @@ with tabs[0]:
 
                 engineer_prompt = st.text_area(
                     "현장 가공 특이사항 / AI 프롬프트 지침 (선택)",
-                    placeholder="예: 공차 ±0.01 엄수 요망, 와이어 방전 외주 제외 3축 MCT 순수가공, 4개 1세트 동시 지그 물림 등",
+                    placeholder="예: 공차 ±0.01 엄수 요망, 와이어 방전 외주 제외 3축 MCT 순수가공 등",
                     height=65
                 )
 
@@ -992,7 +1090,6 @@ with tabs[0]:
                     mime0 = "application/pdf" if f0.name.lower().endswith(".pdf") else "image/jpeg"
                     open_in_new_tab_button(f0.getvalue(), mime0, label="도면 새 창 열기")
 
-                # AI 분석 실행
                 if start_ai:
                     if not uploaded_files:
                         st.warning("⚠️ 먼저 도면 파일을 업로드해 주세요.")
@@ -1020,7 +1117,7 @@ with tabs[0]:
                                     st.session_state["ai_suggested_mat"] = parsed_res.get("material_type", "")
                                     st.session_state["ai_suggested_mac"] = parsed_res.get("recommended_machine", "")
                                     st.session_state["batch_analysis_results"] = []
-                                    st.success(f"✅ [{clean_name}] 판독 완료! 품명 및 가공 조건이 자동 입력되었습니다.")
+                                    st.success(f"✅ [{clean_name}] 판독 완료!")
                                     st.rerun()
                         else:
                             st.session_state["batch_analysis_results"] = []
@@ -1097,14 +1194,13 @@ with tabs[0]:
                             
                             progress_bar.progress(100, text="전체 도면 판독 완료!")
                             st.session_state["batch_analysis_results"] = batch_temp
-                            st.success(f"총 {len(batch_temp)}개 도면 일괄 견적 산출이 완료되었습니다.")
+                            st.success(f"총 {len(batch_temp)}개 도면 일괄 견적 완료!")
                             st.rerun()
 
             else:
                 st.session_state["custom_part_name"] = st.text_input("품명 / 도면 식별 번호", value=st.session_state["custom_part_name"])
             st.markdown('</div>', unsafe_allow_html=True)
 
-        # 품명 지정 & 정밀 검수
         is_batch_active = len(st.session_state.get("batch_analysis_results", [])) > 1
 
         if not is_batch_active:
@@ -1155,7 +1251,6 @@ with tabs[0]:
     with right_col:
         batch_items = st.session_state.get("batch_analysis_results", [])
         
-        # 다중 도면(Batch) 견적 대시보드
         if len(batch_items) > 1:
             with st.container():
                 st.markdown('<div class="panel-card"><div class="panel-title">다품종 일괄 견적 산출 결과</div>', unsafe_allow_html=True)
@@ -1174,7 +1269,7 @@ with tabs[0]:
                     with st.expander(f"{idx+1}. [{b_item['filename']}] - 단가: {b_item['unit_price']:,}원 | 합계: {b_item['total_price']:,}원"):
                         new_pname = st.text_input("품명 수정", value=b_item["filename"], key=f"bpname_{idx}")
                         b_item["filename"] = new_pname
-                        st.caption(f"적용: {b_item['material'].split('/')[0]} | 설비: {b_item['machine_type'].split()[0]} | 중량: {b_item['raw_weight']}kg | 시간: {b_item['hours']}h")
+                        st.caption(f"적용: {b_item['material'].split('/')[0]} | 설비: {b_item['machine_type'].split()[0]} | 중량: {b_item['raw_weight']}kg")
                         st.write(f"**AI 산출 근거**: {b_item['memo']}")
 
                 consolidated_pdf = create_consolidated_batch_pdf(
@@ -1203,7 +1298,7 @@ with tabs[0]:
                             it["date"] = datetime.now().strftime("%Y-%m-%d")
                             orders_db.insert(0, it)
                         save_tenant_data(active_cid, "orders_database.json", orders_db)
-                        st.success(f"[{proj_id}] 프로젝트가 MES 공정 및 그룹 관리에 등록되었습니다.")
+                        st.success(f"[{proj_id}] 프로젝트가 MES 공정에 등록되었습니다.")
                         st.session_state["batch_analysis_results"] = []
                         st.rerun()
 
@@ -1212,7 +1307,6 @@ with tabs[0]:
                     st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
-        # 단일 도면 상세 견적 뷰
         else:
             raw_material_weight = adj_pure_weight * (1.0 + (adj_loss_rate / 100.0))
             mat_unit_price = settings["materials"][sel_material]
@@ -1291,7 +1385,6 @@ with tabs[0]:
                     </div>
                     """, unsafe_allow_html=True)
 
-                # Zumen 스타일 고대비 원가 테이블
                 cost_items = [
                     ("1. 원재료비", f"개당 {round(raw_material_weight,2)}kg x {mat_unit_price:,}원 x {order_qty}EA", f"{mat_total_cost:,} 원"),
                     ("2. 순수가공비", f"{adj_hours}h x 시급 {mac_hourly_rate:,}원 x 난이도 {adj_difficulty}", f"{final_machining_cost:,} 원"),
@@ -1340,9 +1433,9 @@ with tabs[0]:
                 st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------------------------------
-# TAB 2: 공정흐름 관리 (MES 파이프라인)
+# TAB 3: 공정흐름 관리 (MES 파이프라인)
 # ------------------------------------------
-with tabs[1]:
+with tabs[2]:
     st.markdown('<div class="panel-card"><div class="panel-title">공정 상태별 필터</div>', unsafe_allow_html=True)
     if "stage_filter" not in st.session_state:
         st.session_state["stage_filter"] = "전체"
@@ -1365,19 +1458,18 @@ with tabs[1]:
     st.markdown('</div>', unsafe_allow_html=True)
 
     current_filter = st.session_state["stage_filter"]
-    filtered_orders = orders_db if current_filter == "전체" else [o for o in orders_db if o.get("status") == current_filter]
+    mes_filtered = orders_db if current_filter == "전체" else [o for o in orders_db if o.get("status") == current_filter]
 
-    if not filtered_orders:
+    if not mes_filtered:
         st.info("해당 단계의 등록 작업 건이 없습니다.")
     else:
-        for idx, o in enumerate(filtered_orders):
+        for idx, o in enumerate(mes_filtered):
             stage_name = o.get("status", "1. 견적제출")
             header_title = f"[{stage_name}] {o.get('quote_no')} | {o.get('client_name')} : {o.get('filename')} ({o.get('qty')} EA) | 납기: {o.get('due_date')}"
             
             with st.expander(header_title, expanded=(current_filter != "전체")):
                 step_idx = PROCESS_STAGES.index(stage_name) if stage_name in PROCESS_STAGES else 0
                 
-                # Zumen 소프트 배지 체인
                 step_html = "<div style='display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto;'>"
                 for s_i, s_name in enumerate(PROCESS_STAGES):
                     conf = STAGE_CONFIG[s_name]
@@ -1409,9 +1501,9 @@ with tabs[1]:
                         st.rerun()
 
 # ------------------------------------------
-# TAB 3: 납기 캘린더 (Zumen 스케줄러 스타일)
+# TAB 4: 납기 캘린더
 # ------------------------------------------
-with tabs[2]:
+with tabs[3]:
     cal_mode = st.radio("보기 모드", ["월간 달력 그리드", "상세 납기 리스트"], horizontal=True, label_visibility="collapsed")
     today = datetime.today().date()
 
@@ -1479,53 +1571,6 @@ with tabs[2]:
             st.dataframe(pd.DataFrame(cal_list).sort_values(by="납기일"), use_container_width=True)
 
 # ------------------------------------------
-# TAB 4: 그룹 발주 관리
-# ------------------------------------------
-with tabs[3]:
-    st.markdown('<div class="panel-card"><div class="panel-title">다품종 수주 묶음 프로젝트 생성</div>', unsafe_allow_html=True)
-    g_col1, g_col2 = st.columns([3, 1])
-    with g_col1:
-        group_title_input = st.text_input("새 묶음 프로젝트 명칭", placeholder="예: 반도체 라인 지그 4종 묶음")
-    with g_col2:
-        st.write("")
-        st.write("")
-        create_group_btn = st.button("선택 항목 묶음 생성", type="primary", use_container_width=True)
-
-    selected_ids = []
-    for o in orders_db:
-        c_chk, c_txt = st.columns([0.4, 9.6])
-        with c_chk:
-            if st.checkbox("", key=f"chk_{o['id']}"):
-                selected_ids.append(o["id"])
-        with c_txt:
-            tag = f"[{o['group_id']}] " if o.get("group_id") else ""
-            st.write(f"**{tag}{o.get('quote_no')}** | {o.get('client_name')} : {o.get('filename')} ({o.get('qty')}EA) | 공급가: **{o.get('total_price',0):,}원** | 납기: {o.get('due_date')} | 상태: `{o.get('status')}`")
-
-    if create_group_btn:
-        if not group_title_input.strip() or not selected_ids:
-            st.warning("프로젝트 명칭 입력 및 1개 이상의 항목을 체크하세요.")
-        else:
-            for o in orders_db:
-                if o["id"] in selected_ids:
-                    o["group_id"] = group_title_input.strip()
-            save_tenant_data(active_cid, "orders_database.json", orders_db)
-            st.success("그룹화 완료")
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    groups = {}
-    for o in orders_db:
-        if o.get("group_id"):
-            groups.setdefault(o["group_id"], []).append(o)
-
-    for gname, items in groups.items():
-        tot_price = sum(it.get("total_price", 0) for it in items)
-        tot_qty = sum(it.get("qty", 1) for it in items)
-        with st.expander(f"[프로젝트] {gname} (품목 {len(items)}종 | 총 {tot_qty:,} EA | 합계 {tot_price:,} 원)"):
-            sub_rows = [{"견적번호": it.get("quote_no"), "도면명": it.get("filename"), "수량": f"{it.get('qty'):,} EA", "단가": f"{it.get('unit_price',0):,} 원", "합계": f"{it.get('total_price',0):,} 원", "상태": it.get("status")} for it in items]
-            st.dataframe(pd.DataFrame(sub_rows), use_container_width=True)
-
-# ------------------------------------------
 # TAB 5: 시스템 설정 & 테넌트 관리
 # ------------------------------------------
 with tabs[4]:
@@ -1572,7 +1617,7 @@ with tabs[4]:
                 save_tenant_data(clean_code, "orders_database.json", [])
                 save_tenant_data(clean_code, "clients_directory.json", [])
 
-                st.success(f"[{new_comp_name}] 워크스페이스가 생성되었습니다! 발급 ID: {new_comp_admin_id}")
+                st.success(f"[{new_comp_name}] 워크스페이스 생성 완료! 발급 ID: {new_comp_admin_id}")
                 st.rerun()
 
         st.markdown("##### 등록된 고객사 워크스페이스 목록")
