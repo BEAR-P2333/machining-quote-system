@@ -59,7 +59,7 @@ SYSTEM_RELEASE_NOTES = [
         "date": "2026-10-28",
         "title": "카카오톡 알림 및 국세청 전자세금계산서 연동 엔진 탑재",
         "details": [
-            "알이고(Aligo) 규격 카카오 알림톡 엔진 연동 (견적서 발송, 공정단계 변경 알림, 납기 안내)",
+            "알리고(Aligo) 규격 카카오 알림톡 엔진 연동 (견적서 발송, 공정단계 변경 알림, 납기 안내)",
             "팝빌(Popbill) 규격 국세청 전자세금계산서 원클릭 발행 및 국세청 전송 상태 관리 연동",
             "API 실무 키 검증 전에도 전체 워크플로우를 테스트할 수 있는 시뮬레이션(테스트) 모드 지원",
             "견적 상세 검수 및 공정 화면에 카카오톡/세금계산서 액션 버튼 배치",
@@ -2105,14 +2105,14 @@ else:
         
         api_col1, api_col2 = st.columns(2, gap="large")
         with api_col1:
-            st.markdown("##### 💬 카카오 알림톡 설정 (알이고/비즈뿌리오 규격)")
+            st.markdown("##### 💬 카카오톡 알림 설정")
             a_test = st.checkbox("알림톡 테스트(시뮬레이션) 모드 사용", value=api_conf.get("alimtalk_test_mode", True))
             a_key = st.text_input("알림톡 API 인증키 (API Key)", value=api_conf.get("alimtalk_api_key", ""), type="password")
             a_skey = st.text_input("카카오 발신프로필키 (Sender Key)", value=api_conf.get("alimtalk_sender_key", ""))
             a_phone = st.text_input("등록된 발신번호", value=api_conf.get("alimtalk_sender_phone", "031-123-4567"))
         
         with api_col2:
-            st.markdown("##### 🧾 국세청 전자세금계산서 설정 (팝빌/바로빌 규격)")
+            st.markdown("##### 🧾 국세청 전자세금계산서 설정")
             t_test = st.checkbox("전자세금계산서 테스트(시뮬레이션) 모드 사용", value=api_conf.get("tax_invoice_test_mode", True))
             t_corp = st.text_input("발행자 사업자등록번호", value=api_conf.get("tax_invoice_corp_num", settings["company_info"]["biz_num"]))
             t_key = st.text_input("세금계산서 연동 인증키 (Secret Key)", value=api_conf.get("tax_invoice_api_key", ""), type="password")
@@ -2136,7 +2136,7 @@ else:
         st.markdown('</div>', unsafe_allow_html=True)
 
         # 2. 작업 감사 로그
-        st.markdown('<div class="panel-card"><div class="panel-title">📋 시스템 작업 및 견적 산출 감사 로그 (Audit Log)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="panel-card"><div class="panel-title">📋 작업 및 견적 로그 (Audit Log)</div>', unsafe_allow_html=True)
         audit_logs = load_tenant_data(active_cid, "system_audit_logs.json", [])
         if not audit_logs:
             st.caption("아직 기록된 시스템 작업 내역이 없습니다.")
@@ -2255,7 +2255,7 @@ else:
             st.markdown("**표면처리 개당 단가 (원)**")
             up_surfaces = {k: st.number_input(f"{k}", value=int(v), step=500) for k, v in settings["surface_treatments"].items()}
 
-        if st.button("현재 워크스페이스 단가 및 공급사 정보 저장", type="primary", use_container_width=True):
+        if st.button("단가 및 공급사 정보 저장", type="primary", use_container_width=True):
             new_conf = {
                 "company_info": {"company_name": c_name, "biz_num": c_biz, "ceo_name": c_ceo, "tel": c_tel, "email": c_email, "address": c_addr},
                 "materials": up_materials,
