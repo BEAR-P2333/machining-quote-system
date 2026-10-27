@@ -1,5 +1,5 @@
 streamlit
-google-genai
-fpdf2
-pillow
+openai
+pypdfium2
+fpdf
 pandas
