@@ -442,7 +442,7 @@ if not st.session_state["auth_user"]:
         st.markdown("""
         <div style="text-align:center; margin-bottom:20px;">
             <div style="font-size:26px; font-weight:800; color:#1976D2; letter-spacing:0.5px;">COSTIFY PORTAL</div>
-            <div style="font-size:13px; color:#565656; margin-top:4px;">정밀 절삭가공 표준 원가 산출 및 MES 워크스페이스</div>
+            <div style="font-size:13px; color:#565656; margin-top:4px;">정밀 절삭가공 표준 원가 산출 AI 시스템</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -820,7 +820,7 @@ def analyze_drawing_gemini(api_key, file_bytes, mime_type, filename, engineer_pr
     for attempt in range(2):
         try:
             response = client.models.generate_content(
-                model="gemini-3.8-flash",
+                model="gemini-3.5-flash",
                 contents=[doc_part, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
@@ -1134,7 +1134,7 @@ def render_veteran_detail_view(quote_id):
 if st.session_state["selected_quote_detail_id"] is not None:
     render_veteran_detail_view(st.session_state["selected_quote_detail_id"])
 else:
-    tabs = st.tabs(["견적 대시보드 (목록)", "신규 견적 산출", "공정흐름 관리 (MES)", "납기 캘린더", "시스템 설정"])
+    tabs = st.tabs(["견적 대시보드 (목록)", "신규 견적 산출", "가공 공정 관리", "납기 캘린더", "시스템 설정"])
 
     # ------------------------------------------
     # TAB 1: 견적 대시보드 (컴팩트 필터 레일 & 25건 페이징)
@@ -1764,7 +1764,7 @@ else:
                                         old_st = orders_db[real_idx]["status"]
                                         orders_db[real_idx]["status"] = new_status
                                         orders_db[real_idx]["memo"] = new_memo
-                                        log_audit(active_cid, logged_user["name"], "MES 공정 변경", f"[{o.get('quote_no')}] {o.get('filename')}", f"{old_st} ➔ {new_status}")
+                                        log_audit(active_cid, logged_user["name"], "공정 변경", f"[{o.get('quote_no')}] {o.get('filename')}", f"{old_st} ➔ {new_status}")
                                         break
                                 save_tenant_data(active_cid, "orders_database.json", orders_db)
                                 st.success("저장 완료")
