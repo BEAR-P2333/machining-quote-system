@@ -17,27 +17,26 @@ from datetime import datetime, timedelta
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.4.1"
+CURRENT_SYSTEM_VERSION = "v2.4.2"
 
 SYSTEM_RELEASE_NOTES = [
     {
-        "version": "v2.4.1",
+        "version": "v2.4.2",
         "date": "2026-10-27",
-        "title": "사이드바/탭 시인성 완전 복구, 대형 캘린더 및 3.8-Flash 초고속화",
+        "title": "납기 지연/위험 집계 일원화 및 브라우저 다크모드 강제 차단",
         "details": [
-            "사이드바 툴박스 및 메인 탭 텍스트 배경 묻힘 현상 완전 해결 (고대비 다크 텍스트 강제 적용)",
-            "대시보드 내 중복 버튼(+ 신규 견적 산출) 제거 및 상단 레이아웃 정돈",
-            "업데이트 미확인 시 명확한 빨간 점(🔴) 인디케이터 적용",
-            "납기 캘린더 셀 높이 및 폰트 대폭 확장(145px)으로 가독성 극대화",
-            "AI 비전 엔진을 gemini-3.8-flash 단독 체인으로 변경하여 2~3초대 초고속 분석 달성"
+            "메인 대시보드 납기 위험 건수 계산 로직 일원화 (지연 및 D-3 이내 임박 건 정상 합산)",
+            "@media (prefers-color-scheme: dark) 무력화로 기기 테마 상관없이 Zumen 라이트 테마 영구 고정",
+            "글자색 및 컴포넌트 배경 강제 바인딩으로 시인성 누락 방지"
         ]
     },
     {
-        "version": "v2.4.0",
+        "version": "v2.4.1",
         "date": "2026-10-27",
-        "title": "Zumen 3단 분할 레이아웃(좌측 필터 레일 + 견적 대시보드) 개편",
+        "title": "사이드바/탭 시인성 복구, 대형 캘린더 및 3.8-Flash 초고속화",
         "details": [
-            "좌측 고정 필터 레일 및 상단 전역 자유어 검색창 구축"
+            "사이드바 툴박스 다크 텍스트 강제 적용",
+            "대시보드 내 중복 버튼 제거 및 캘린더 대형화(145px)"
         ]
     }
 ]
@@ -177,29 +176,48 @@ if migration_needed:
     save_json(USERS_FILE, users_db)
 
 # ==========================================
-# 2. UI 테마 & 고시인성 스타일 시스템
+# 2. UI 테마 & 브라우저 다크모드 강제 무력화 (영구 라이트 모드 고정)
 # ==========================================
 st.set_page_config(page_title="Costify | 정밀 절삭가공 견적 & MES", page_icon="⚙️", layout="wide")
 
 st.markdown("""
 <style>
-    :root, html, body {
+    /* 브라우저 OS의 다크모드 강제 차단 및 영구 라이트 테마 바인딩 */
+    :root, html, body, [data-theme="light"], [data-theme="dark"], [data-testid="stAppViewContainer"], .stApp {
         color-scheme: light !important;
-        --zm-primary: #1976D2;
-        --zm-surface: #ffffff;
-        --zm-surface-app: #f6f6f6;
-        --zm-border: #cccccc;
-        --zm-text: #111111;
-        --zm-text-muted: #565656;
-    }
-
-    .stApp {
+        --background-color: #f6f6f6 !important;
+        --secondary-background-color: #ffffff !important;
+        --text-color: #111111 !important;
+        --primary-color: #1976D2 !important;
         background-color: #f6f6f6 !important;
         color: #111111 !important;
         font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", Roboto, sans-serif !important;
     }
 
-    /* 1. 사이드바 및 툴박스 고시인성 다크 텍스트 강제 적용 */
+    /* 크롬 다크모드 미디어 쿼리 덮어쓰기 */
+    @media (prefers-color-scheme: dark) {
+        :root, html, body, [data-testid="stAppViewContainer"], .stApp {
+            color-scheme: light !important;
+            background-color: #f6f6f6 !important;
+            color: #111111 !important;
+        }
+        [data-testid="stSidebar"] {
+            background-color: #ffffff !important;
+        }
+        [data-testid="stSidebar"] * {
+            color: #1e293b !important;
+        }
+        .panel-card, .filter-rail, .quote-card, .metric-container {
+            background-color: #ffffff !important;
+            color: #111111 !important;
+        }
+        input, textarea, select, [data-baseweb="select"] > div {
+            background-color: #ffffff !important;
+            color: #111111 !important;
+        }
+    }
+
+    /* 사이드바 스타일 */
     [data-testid="stSidebar"] {
         background-color: #ffffff !important;
         border-right: 1px solid #e0e0e0 !important;
@@ -226,7 +244,7 @@ st.markdown("""
         margin-bottom: 8px !important;
     }
 
-    /* 2. 메인 탭(Tabs) 글자 시인성 강화 */
+    /* 메인 탭 글자 시인성 강화 */
     .stTabs [data-baseweb="tab-list"] {
         gap: 16px;
         background-color: #ffffff !important;
@@ -249,7 +267,7 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* 3. 패널 카드 및 필터 레일 */
+    /* 패널 카드 및 필터 레일 */
     .panel-card {
         background: #ffffff !important;
         border: 1px solid #dcdcdc !important;
@@ -278,7 +296,7 @@ st.markdown("""
         padding-bottom: 8px;
     }
 
-    /* 4. 견적 카드 (Quote Card) */
+    /* 견적 카드 */
     .quote-card {
         background: #ffffff;
         border: 1px solid #dcdcdc;
@@ -323,7 +341,7 @@ st.markdown("""
         margin-top: 8px;
     }
 
-    /* 5. 폼 라벨 및 인풋 */
+    /* 폼 라벨 및 인풋 */
     label, .stWidgetLabel p, .stWidgetLabel span {
         color: #1e293b !important;
         font-weight: 600 !important;
@@ -373,7 +391,7 @@ st.markdown("""
     .metric-label { color: #64748b; font-size: 11.5px; font-weight: 600; }
     .metric-val { color: #0f172a; font-size: 20px; font-weight: 700; margin-top: 2px; }
 
-    /* 6. 대형 납기 캘린더 스타일 */
+    /* 대형 납기 캘린더 스타일 */
     .cal-header {
         background-color: #f1f5f9;
         color: #334155;
@@ -531,7 +549,6 @@ with u_col2:
         rel_c, btn_c = st.columns([1.5, 1])
 
     with rel_c:
-        # 미확인 업데이트 시 선명한 빨간 점(🔴) 노출
         lbl = "업데이트 🔴" if has_new_update else "업데이트"
         with st.popover(lbl, use_container_width=True):
             st.markdown(f"#### 시스템 릴리즈 노트 ({CURRENT_SYSTEM_VERSION})")
@@ -743,7 +760,6 @@ def analyze_drawing_resilient(api_key, file_bytes, mime_type, filename, engineer
     }}
     """
     
-    # 지연 유발하는 Pro 모델을 완전히 배제하고 초경량 초고속 플래시 모델로만 단일/신속 호출
     models_cascade = ["gemini-3.8-flash", "gemini-2.5-flash"]
     last_err_detail = ""
     
@@ -950,18 +966,32 @@ with tabs[0]:
         elif f_sort == "납기 임박순":
             filtered_orders.sort(key=lambda x: str(x.get("due_date", "9999-99-99")))
 
-        # 상단 헤더 및 라디오 토글 (불필요한 + 신규 견적 버튼 제거 완료)
+        # 상단 헤더 및 라디오 토글
         h_left, h_right = st.columns([3, 1.5])
         with h_left:
             st.markdown(f"#### 견적 관리 <span style='font-size:14px; font-weight:400; color:#565656;'>(전체 {len(filtered_orders)}건)</span>", unsafe_allow_html=True)
         with h_right:
             view_mode = st.radio("보기 모드", ["카드형 (미리보기)", "목록형 (테이블)"], horizontal=True, label_visibility="collapsed", key="v_toggle")
 
-        # KPI 요약 리본
+        # KPI 요약 리본 (사이드바와 동일하게 지연 및 D-3 이내 임박 건 완벽 동기화)
         tot_sum = sum(o.get("total_price", 0) for o in filtered_orders)
         tot_qty = sum(o.get("qty", 1) for o in filtered_orders)
         today_date = datetime.today().date()
-        late_count = sum(1 for o in filtered_orders if o.get("status") != "7. 출하완료" and o.get("due_date") and datetime.strptime(o.get("due_date"), "%Y-%m-%d").date() < today_date)
+        
+        urgent_late_count = 0
+        has_strictly_overdue = False
+        for o in filtered_orders:
+            if o.get("status") != "7. 출하완료" and o.get("due_date"):
+                try:
+                    d_dt = datetime.strptime(o.get("due_date"), "%Y-%m-%d").date()
+                    diff = (d_dt - today_date).days
+                    if diff < 0:
+                        urgent_late_count += 1
+                        has_strictly_overdue = True
+                    elif diff <= 3:
+                        urgent_late_count += 1
+                except Exception:
+                    pass
 
         m1, m2, m3 = st.columns(3)
         with m1:
@@ -969,8 +999,8 @@ with tabs[0]:
         with m2:
             st.markdown(f'<div class="metric-container"><div class="metric-label">총 발주 물량 (수량)</div><div class="metric-val">{tot_qty:,} EA</div></div>', unsafe_allow_html=True)
         with m3:
-            color_late = "#DA4D3A" if late_count > 0 else "#236542"
-            st.markdown(f'<div class="metric-container"><div class="metric-label">납기 지연 / 위험 건수</div><div class="metric-val" style="color:{color_late};">{late_count} 건</div></div>', unsafe_allow_html=True)
+            color_late = "#DA4D3A" if has_strictly_overdue else ("#DD6B20" if urgent_late_count > 0 else "#236542")
+            st.markdown(f'<div class="metric-container"><div class="metric-label">납기 지연 / 위험 건수 (D-3 이내)</div><div class="metric-val" style="color:{color_late};">{urgent_late_count} 건</div></div>', unsafe_allow_html=True)
 
         if not filtered_orders:
             st.info("검색 및 필터 조건에 일치하는 등록 견적이 없습니다.")
@@ -1366,7 +1396,6 @@ with tabs[3]:
         month_days = cal.monthdatescalendar(cal_year, cal_month)
         week_headers = ["일 (Sun)", "월 (Mon)", "화 (Tue)", "수 (Wed)", "목 (Thu)", "금 (Fri)", "토 (Sat)"]
         
-        # 145px 높이의 큼직한 실무 캘린더 렌더링
         grid_html = "<table style='width:100%; border-collapse:collapse; margin-top:8px;'><thead><tr>"
         for i, wh in enumerate(week_headers):
             color = "#DA4D3A" if i == 0 else ("#1976D2" if i == 6 else "#334155")
