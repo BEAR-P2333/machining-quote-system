@@ -4,7 +4,7 @@ import streamlit as st
 # [중요] 최상단 와이드 레이아웃 강제 지정 (화면 찌그러짐 방지)
 # ==========================================
 st.set_page_config(
-    page_title="Costify | 정밀 절삭가공 견적 시스템",
+    page_title="Costify | 정밀 절삭가공 AI 견적 시스템",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -431,7 +431,7 @@ if not st.session_state["auth_user"]:
         st.markdown("""
         <div style="text-align:center; margin-bottom:20px;">
             <div style="font-size:26px; font-weight:800; color:#1976D2; letter-spacing:0.5px;">COSTIFY PORTAL</div>
-            <div style="font-size:13px; color:#565656; margin-top:4px;">정밀 절삭가공 표준 원가 산출 및 MES 워크스페이스</div>
+            <div style="font-size:13px; color:#565656; margin-top:4px;">정밀 절삭가공 표준 원가 산출 AI 시스템</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -967,7 +967,7 @@ def create_formal_pdf(q, company_info):
 # ==========================================
 # 8. 메인 워크스페이스
 # ==========================================
-tabs = st.tabs(["견적 대시보드 (목록)", "신규 견적 산출", "공정흐름 관리 (MES)", "납기 캘린더", "시스템 설정"])
+tabs = st.tabs(["견적 대시보드 (목록)", "신규 견적 산출", "공정흐름 관리", "납기 캘린더", "시스템 설정"])
 
 # ------------------------------------------
 # TAB 1: 견적 대시보드 (목록 & 썸네일)
@@ -1496,7 +1496,7 @@ with tabs[2]:
                                 old_st = orders_db[real_idx]["status"]
                                 orders_db[real_idx]["status"] = new_status
                                 orders_db[real_idx]["memo"] = new_memo
-                                log_audit(active_cid, logged_user["name"], "MES 공정 변경", f"[{o.get('quote_no')}] {o.get('filename')}", f"{old_st} ➔ {new_status}")
+                                log_audit(active_cid, logged_user["name"], "공정 변경", f"[{o.get('quote_no')}] {o.get('filename')}", f"{old_st} ➔ {new_status}")
                                 break
                         save_tenant_data(active_cid, "orders_database.json", orders_db)
                         st.success("저장 완료")
