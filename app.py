@@ -1281,7 +1281,7 @@ def render_veteran_detail_view(quote_id):
 if st.session_state["selected_quote_detail_id"] is not None:
     render_veteran_detail_view(st.session_state["selected_quote_detail_id"])
 else:
-    tabs = st.tabs(["견적 대시보드 (목록)", "신규 견적 산출", "공정흐름 관리 (MES)", "납기 캘린더", "시스템 설정"])
+    tabs = st.tabs(["견적 대시보드 (목록)", "신규 견적 산출", "공정흐름 관리", "납기 캘린더", "시스템 설정"])
 
     # ------------------------------------------
     # TAB 1: 견적 대시보드 (컴팩트 필터 레일 & 25건 페이징)
@@ -2147,7 +2147,7 @@ else:
             
             csv_data = log_df.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
-                "📥 감사 로그 CSV 다운로드",
+                "📥 로그 CSV 다운로드",
                 data=csv_data,
                 file_name=f"costify_{active_cid}_audit_logs_{datetime.now().strftime('%Y%m%d')}.csv",
                 mime="text/csv",
