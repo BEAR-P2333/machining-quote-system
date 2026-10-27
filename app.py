@@ -4,7 +4,7 @@ import streamlit as st
 # [중요] 최상단 와이드 레이아웃 강제 지정
 # ==========================================
 st.set_page_config(
-    page_title="Costify | 정밀 절삭가공 견적 & MES",
+    page_title="Costify | 정밀 절삭가공 견적 AI 시스템",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -56,7 +56,7 @@ SYSTEM_RELEASE_NOTES = [
     {
         "version": "v2.5.8",
         "date": "2026-10-27",
-        "title": "실제 도면 캡처 썸네일, 20년차 공장장 현장 상세뷰 및 공정 편집 기능 탑재",
+        "title": "실제 도면 캡처 썸네일, 상세뷰 및 공정 편집 기능 탑재",
         "details": [
             "가상 SVG 템플릿 제거 및 업로드된 실제 도면(PDF/이미지) 100% 일치 썸네일 연동",
             "대시보드/캘린더 안건 클릭 시 20년차 공장장 맞춤형 견적 상세 검수 화면 전환",
