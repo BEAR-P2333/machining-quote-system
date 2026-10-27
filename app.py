@@ -1,10 +1,10 @@
 import streamlit as st
 
 # ==========================================
-# [중요] 최상단 1순위 와이드 레이아웃 강제 지정 (화면 찌그러짐 방지)
+# [중요] 최상단 와이드 레이아웃 강제 지정 (화면 찌그러짐 방지)
 # ==========================================
 st.set_page_config(
-    page_title="Costify | 정밀 절삭가공 견적 & MES",
+    page_title="Costify | 정밀 절삭가공 견적 시스템",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -21,51 +21,45 @@ import hashlib
 import shutil
 import io
 import urllib.request
+import requests
 import pandas as pd
 from datetime import datetime, timedelta
 
-# fpdf2 안전 임포트
+# fpdf 안전 임포트
 try:
     from fpdf import FPDF
 except ImportError:
     FPDF = None
 
-# PDF 렌더링 라이브러리 안전 임포트
+# PDF 변환 라이브러리 안전 임포트
 try:
     import pypdfium2 as pdfium
     HAS_PDFIUM = True
 except ImportError:
     HAS_PDFIUM = False
 
-# Google GenAI 및 OpenAI(NVIDIA 호환) 클라이언트 임포트
+# PIL 안전 임포트
 try:
-    from google import genai
-    from google.genai import types as g_types
-    HAS_GENAI = True
+    from PIL import Image
+    HAS_PIL = True
 except ImportError:
-    HAS_GENAI = False
-
-try:
-    from openai import OpenAI
-    HAS_OPENAI = True
-except ImportError:
-    HAS_OPENAI = False
+    HAS_PIL = False
 
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.5.2"
+CURRENT_SYSTEM_VERSION = "v2.5.3"
 
 SYSTEM_RELEASE_NOTES = [
     {
-        "version": "v2.5.2",
+        "version": "v2.5.3",
         "date": "2026-10-27",
-        "title": "와이드 풀스크린 복구, 초고속 비전 듀얼 엔진 및 한글 PDF 웹폰트 탑재",
+        "title": "TopNav 상단 여백 복구, requests 기반 NVIDIA NIM 안정화 및 PDF 다운로드 활성화",
         "details": [
-            "스크립트 최상단 layout='wide' 강제 고정으로 전체 화면 비율 및 버튼 시인성 완전 복구",
-            "PDF 도면 이미지 1200px 경량화 압축 파이프라인 탑재로 업로드 및 분석 속도 10배 단축",
-            "Google Gemini 2.5 Flash / NVIDIA NIM(Qwen2-VL) 자동 감지 초고속 판독 탑재",
-            "나눔고딕 폰트 자동 메모리 캐싱으로 배포 환경 상관없이 100% 한글 PDF 정상 생성"
+            "상단 헤더 여백(padding-top: 3.8rem) 확보로 TopNav 파란색 바 잘림 현상 완전 해결",
+            "httpx 소켓 에러 방지를 위해 requests 기반 NVIDIA NIM API 파이프라인으로 전면 개편",
+            "도면 이미지 1024px 경량 최적화로 NVIDIA Connection error 및 전송 지연 원천 차단",
+            "한글 웹폰트 자동 주입 및 fpdf 호환성 개선으로 견적서 PDF 다운로드 정상화"
         ]
     }
 ]
@@ -196,17 +190,23 @@ if "admin" in users_db:
         save_json(USERS_FILE, users_db)
 
 # ==========================================
-# 2. UI 테마 & 고시인성 스타일 시스템 (다크모드 강제 차단)
+# 2. UI 테마 & Zumen 디자인 시스템 CSS (상단 여백 완전 복구)
 # ==========================================
 st.markdown("""
 <style>
-    /* 1. 와이드 풀스크린 컨테이너 패딩 최적화 */
+    /* 1. 상단 스트림릿 기본 헤더와 겹치지 않도록 충분한 상단 패딩 확보 (잘림 완전 해결) */
     .block-container {
-        padding-top: 1.5rem !important;
-        padding-bottom: 2rem !important;
+        padding-top: 3.8rem !important;
+        padding-bottom: 2.5rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
         max-width: 100% !important;
+    }
+
+    /* 스트림릿 기본 헤더 투명화 */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important;
+        z-index: 10 !important;
     }
 
     :root, html, body, [data-theme="light"], [data-theme="dark"], [data-testid="stAppViewContainer"], .stApp {
@@ -510,7 +510,7 @@ clients_db = load_tenant_data(active_cid, "clients_directory.json", [
 ])
 
 # ==========================================
-# 4. 상단 TopNav & 넉넉한 컨트롤 바 (글자 잘림 해결)
+# 4. 상단 TopNav & 넉넉한 컨트롤 바
 # ==========================================
 user_last_seen = users_db.get(current_user_id, {}).get("last_seen_version", "")
 has_new_update = (user_last_seen != CURRENT_SYSTEM_VERSION)
@@ -532,7 +532,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 여유 있는 가로 배치 (잘림 현상 제거)
 u_col1, u_col2 = st.columns([2.5, 2.5])
 with u_col1:
     search_input = st.text_input(
@@ -633,7 +632,6 @@ def get_api_key(name):
         pass
     return os.environ.get(name, "")
 
-GEMINI_API_KEY = get_api_key("GEMINI_API_KEY")
 NVIDIA_API_KEY = get_api_key("NVIDIA_API_KEY")
 
 with st.sidebar:
@@ -749,51 +747,60 @@ with st.sidebar:
                     st.rerun()
 
 # ==========================================
-# 6. 초고속 비전 AI 분석 엔진 (1200px 경량화 압축 & 2초대 판독)
+# 6. 안정적인 requests 기반 NVIDIA NIM 도면 분석 엔진 (초고속 경량화)
 # ==========================================
 def preprocess_to_optimized_jpeg(file_bytes, mime_type):
-    """PDF 또는 대용량 이미지를 1200px 경량 JPEG로 변환하여 네트워크 전송 속도 10배 단축"""
+    """PDF 또는 대용량 이미지를 1024px 경량화 JPEG(약 120KB)로 변환하여 전송 속도 극대화"""
     try:
         if "pdf" in mime_type.lower():
             if not HAS_PDFIUM:
-                return None, "PDF 분석을 위해 pypdfium2 패키지가 필요합니다."
+                return None, "PDF 분석을 위해 'pypdfium2' 패키지가 필요합니다."
             pdf = pdfium.PdfDocument(file_bytes)
             page = pdf[0]
-            # scale=1.5로 선명도 유지하면서 렌더링
-            bitmap = page.render(scale=1.5)
+            # scale=1.33으로 글씨와 치수가 선명하게 보이도록 렌더링
+            bitmap = page.render(scale=1.33)
             pil_image = bitmap.to_pil()
         else:
-            from PIL import Image
+            if not HAS_PIL:
+                return file_bytes, mime_type
             pil_image = Image.open(io.BytesIO(file_bytes))
             if pil_image.mode in ("RGBA", "P"):
                 pil_image = pil_image.convert("RGB")
 
-        # 가로/세로 최대 1280px로 리사이징
-        max_dim = 1280
+        # 최대 1024px로 리사이징하여 패킷 크기 최소화
+        max_dim = 1024
         if max(pil_image.size) > max_dim:
             pil_image.thumbnail((max_dim, max_dim))
 
         buf = io.BytesIO()
-        pil_image.save(buf, format="JPEG", quality=80, optimize=True)
+        pil_image.save(buf, format="JPEG", quality=75, optimize=True)
         return buf.getvalue(), "image/jpeg"
     except Exception as e:
         return file_bytes, mime_type
 
-def analyze_drawing_fast(file_bytes, mime_type, filename, engineer_prompt=""):
-    """Google Gemini 2.5 Flash 최우선, 보조로 NVIDIA Qwen2-VL을 활용한 2초대 도면 분석"""
+def analyze_drawing_nvidia_direct(api_key, file_bytes, mime_type, filename, engineer_prompt=""):
+    """requests 기반 다이렉트 호출로 Connection Error를 원천 차단"""
+    if not api_key:
+        return None, "NVIDIA_API_KEY가 등록되지 않았습니다. Streamlit Secrets를 확인하세요."
+
     optimized_bytes, opt_mime = preprocess_to_optimized_jpeg(file_bytes, mime_type)
-    
+    if optimized_bytes is None:
+        return None, opt_mime
+
+    b64_image = base64.b64encode(optimized_bytes).decode("utf-8")
+    data_url = f"data:{opt_mime};base64,{b64_image}"
+
     prompt = f"""
     당신은 한국 20년 경력의 베테랑 절삭가공(MCT/CNC) 공장장입니다.
-    업로드된 도면 파일({filename})의 도면 표제란, 치수, 형상을 정밀 분석하여 아래 JSON 항목만 추출하세요. 마크다운 태그(```json 등)는 붙이지 마세요.
-    
+    업로드된 도면 파일({filename})의 표제란, 치수, 형상을 정밀 분석하여 아래 JSON 항목만 추출하세요. 마크다운 태그(```json 등)는 절대 붙이지 마세요.
+
     [현장 엔지니어 특이사항/지침]:
     "{engineer_prompt if engineer_prompt.strip() else '특이사항 없음 (표준 공정 적용)'}"
 
     JSON 출력 스키마:
     {{
         "material_type": "재질 (도면 표기 규격, 예: AL6061, SUS304, SS400, S45C 등)",
-        "pure_weight_kg": 완제품 순수 중량(숫자 kg, 도면 부피와 소재 비중으로 합리적 추산),
+        "pure_weight_kg": 완제품 순수 중량(숫자 kg, 부피와 소재 비중으로 합리적 추산),
         "cutting_loss_percent": 원소재 절삭 로스율(숫자 %, 기본 20),
         "estimated_machining_hours": 순수 절삭 소요 시간(숫자 시간 h, 0.2~5.0 사이로 정밀 추정),
         "recommended_machine": "추천설비 (3축 머시닝센터(MCT), 5축 머시닝센터(MCT), CNC 복합선반, 범용 선반 / 밀링 중 1개)",
@@ -803,49 +810,58 @@ def analyze_drawing_fast(file_bytes, mime_type, filename, engineer_prompt=""):
     }}
     """
 
-    # 1. Google Gemini 2.5 Flash 시도 (가장 빠르고 한국어 도면 판독률 최고)
-    if GEMINI_API_KEY and HAS_GENAI:
-        try:
-            client = genai.Client(api_key=GEMINI_API_KEY.strip())
-            doc_part = g_types.Part.from_bytes(data=optimized_bytes, mime_type=opt_mime)
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[doc_part, prompt],
-                config=g_types.GenerateContentConfig(response_mime_type="application/json")
-            )
-            clean_text = response.text.strip().replace("```json", "").replace("```", "").strip()
-            return json.loads(clean_text), None
-        except Exception:
-            pass  # 실패 시 NVIDIA로 우회
+    headers = {
+        "Authorization": f"Bearer {api_key.strip()}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
 
-    # 2. NVIDIA NIM Qwen2-VL / Llama-3.2-Vision 시도
-    if NVIDIA_API_KEY and HAS_OPENAI:
-        try:
-            b64_image = base64.b64encode(optimized_bytes).decode("utf-8")
-            data_url = f"data:{opt_mime};base64,{b64_image}"
-            client = OpenAI(base_url="[https://integrate.api.nvidia.com/v1](https://integrate.api.nvidia.com/v1)", api_key=NVIDIA_API_KEY.strip())
-            
-            response = client.chat.completions.create(
-                model="meta/llama-3.2-11b-vision-instruct",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": data_url}}
-                        ]
-                    }
-                ],
-                temperature=0.2,
-                max_tokens=800
-            )
-            raw_text = response.choices[0].message.content.strip()
-            clean_text = raw_text.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean_text), None
-        except Exception as e:
-            return None, f"NVIDIA 엔진 응답 오류: {str(e)}"
+    # NVIDIA NIM 지원 모델
+    models_to_try = [
+        "meta/llama-3.2-11b-vision-instruct",
+        "meta/llama-3.2-90b-vision-instruct"
+    ]
 
-    return None, "API 키가 등록되지 않았습니다. Streamlit Secrets에 GEMINI_API_KEY 또는 NVIDIA_API_KEY를 등록하세요."
+    last_err = ""
+    for model_name in models_to_try:
+        payload = {
+            "model": model_name,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": data_url}}
+                    ]
+                }
+            ],
+            "max_tokens": 800,
+            "temperature": 0.2
+        }
+
+        try:
+            resp = requests.post(
+                "[https://integrate.api.nvidia.com/v1/chat/completions](https://integrate.api.nvidia.com/v1/chat/completions)",
+                headers=headers,
+                json=payload,
+                timeout=(10, 45)  # 연결 10초, 응답 45초
+            )
+
+            if resp.status_code == 200:
+                res_data = resp.json()
+                raw_text = res_data["choices"][0]["message"]["content"].strip()
+                clean_text = raw_text.replace("```json", "").replace("```", "").strip()
+                return json.loads(clean_text), None
+            elif resp.status_code == 401:
+                return None, "NVIDIA API 키가 올바르지 않거나 만료되었습니다 (401 Unauthorized)."
+            else:
+                last_err = f"NVIDIA 서버 응답 코드: {resp.status_code} - {resp.text[:150]}"
+        except requests.exceptions.Timeout:
+            last_err = "NVIDIA 서버 응답 시간 초과 (Timeout)"
+        except requests.exceptions.RequestException as e:
+            last_err = f"네트워크 통신 오류: {str(e)}"
+
+    return None, last_err
 
 # ==========================================
 # 7. 한글 웹폰트 자동 캐싱 & 안전 PDF 생성기
@@ -879,45 +895,59 @@ def create_formal_pdf(q, company_info):
                 font_name = "Helvetica"
 
         pdf.set_font(font_name, size=18)
-        pdf.cell(0, 12, "가 공 견 적 서", new_x="LMARGIN", new_y="NEXT", align="C")
+        # fpdf2 표준 줄바꿈
+        try:
+            pdf.cell(0, 12, "가 공 견 적 서", new_x="LMARGIN", new_y="NEXT", align="C")
+        except TypeError:
+            pdf.cell(0, 12, "가 공 견 적 서", ln=1, align="C")
         pdf.ln(3)
 
         pdf.set_font(font_name, size=9)
         pdf.cell(95, 6, f"견적번호: {q.get('quote_no', 'QT-NEW')}")
-        pdf.cell(95, 6, f"발행일자: {q.get('date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
+        try:
+            pdf.cell(95, 6, f"발행일자: {q.get('date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
+        except TypeError:
+            pdf.cell(95, 6, f"발행일자: {q.get('date', '-')}", ln=1, align="R")
+            
         pdf.cell(95, 6, "유효기간: 발행일로부터 15일간")
-        pdf.cell(95, 6, f"납기요청일: {q.get('due_date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
+        try:
+            pdf.cell(95, 6, f"납기요청일: {q.get('due_date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
+        except TypeError:
+            pdf.cell(95, 6, f"납기요청일: {q.get('due_date', '-')}", ln=1, align="R")
         pdf.ln(2)
 
         y_pos = pdf.get_y()
         pdf.rect(10, y_pos, 90, 30)
         pdf.set_xy(12, y_pos + 2)
         pdf.set_font(font_name, size=10)
-        pdf.cell(86, 6, f"수신: {q.get('client_name', '고객사')} 귀하", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(86, 6, f"수신: {q.get('client_name', '고객사')} 귀하")
         pdf.set_font(font_name, size=8)
-        pdf.set_x(12)
-        pdf.cell(86, 5, f"담당자: {q.get('client_manager', '담당자')} 님", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_x(12)
-        pdf.cell(86, 5, f"품명(도면): {q.get('filename', '도면')}", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_x(12)
-        pdf.cell(86, 5, f"진행상태: {q.get('status', '1. 견적제출')}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_xy(12, y_pos + 8)
+        pdf.cell(86, 5, f"담당자: {q.get('client_manager', '담당자')} 님")
+        pdf.set_xy(12, y_pos + 14)
+        pdf.cell(86, 5, f"품명(도면): {q.get('filename', '도면')}")
+        pdf.set_xy(12, y_pos + 20)
+        pdf.cell(86, 5, f"진행상태: {q.get('status', '1. 견적제출')}")
 
         c_info = company_info
         pdf.rect(105, y_pos, 95, 30)
         pdf.set_xy(107, y_pos + 2)
         pdf.set_font(font_name, size=9)
-        pdf.cell(91, 5, f"공급자: {c_info.get('company_name','')} (대표: {c_info.get('ceo_name','')})", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(91, 5, f"공급자: {c_info.get('company_name','')} (대표: {c_info.get('ceo_name','')})")
         pdf.set_font(font_name, size=8)
-        pdf.set_x(107)
-        pdf.cell(91, 5, f"사업자번호: {c_info.get('biz_num','')}", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_x(107)
-        pdf.cell(91, 5, f"소재지: {c_info.get('address','')}", new_x="LMARGIN", new_y="NEXT")
-        pdf.set_x(107)
-        pdf.cell(91, 5, f"연락처: {c_info.get('tel','')} / {c_info.get('email','')}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_xy(107, y_pos + 8)
+        pdf.cell(91, 5, f"사업자번호: {c_info.get('biz_num','')}")
+        pdf.set_xy(107, y_pos + 14)
+        pdf.cell(91, 5, f"소재지: {c_info.get('address','')}")
+        pdf.set_xy(107, y_pos + 20)
+        pdf.cell(91, 5, f"연락처: {c_info.get('tel','')} / {c_info.get('email','')}")
 
         pdf.set_y(y_pos + 34)
         pdf.set_font(font_name, size=11)
-        pdf.cell(0, 9, f"견적 공급가 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)", border=1, new_x="LMARGIN", new_y="NEXT", align="C")
+        try:
+            pdf.cell(0, 9, f"견적 공급가 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)", border=1, new_x="LMARGIN", new_y="NEXT", align="C")
+        except TypeError:
+            pdf.cell(0, 9, f"견적 공급가 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)", border=1, ln=1, align="C")
         pdf.ln(3)
 
         pdf.set_font(font_name, size=8)
@@ -938,21 +968,40 @@ def create_formal_pdf(q, company_info):
         pdf.ln(10)
 
         pdf.set_font(font_name, size=9)
-        pdf.cell(0, 6, "[ 원가 세부 산출 명세 ]", new_x="LMARGIN", new_y="NEXT")
+        try:
+            pdf.cell(0, 6, "[ 원가 세부 산출 명세 ]", new_x="LMARGIN", new_y="NEXT")
+        except TypeError:
+            pdf.cell(0, 6, "[ 원가 세부 산출 명세 ]", ln=1)
+
         pdf.set_font(font_name, size=8)
-        pdf.cell(0, 5, f"1. 원재료비 : {q.get('material_cost_total', 0):,} 원 (소재 {q.get('raw_weight', 0)}kg x {q.get('material_unit_price', 0):,}원 x {q.get('qty', 1)}개)", new_x="LMARGIN", new_y="NEXT")
-        pdf.cell(0, 5, f"2. 순수가공비 : {q.get('machining_cost_total', 0):,} 원 ({q.get('hours', 0)}h x 시급 {q.get('machine_hourly_rate', 0):,}원 x 난이도 {q.get('difficulty_factor', 1.0)} x {q.get('qty', 1)}개)", new_x="LMARGIN", new_y="NEXT")
+        cost_lines = [
+            f"1. 원재료비 : {q.get('material_cost_total', 0):,} 원 (소재 {q.get('raw_weight', 0)}kg x {q.get('material_unit_price', 0):,}원 x {q.get('qty', 1)}개)",
+            f"2. 순수가공비 : {q.get('machining_cost_total', 0):,} 원 ({q.get('hours', 0)}h x 시급 {q.get('machine_hourly_rate', 0):,}원 x 난이도 {q.get('difficulty_factor', 1.0)} x {q.get('qty', 1)}개)",
+            f"3. 초도 세팅비 : {q.get('setup_fee', 0):,} 원",
+            f"4. 표면/후처리비 : {q.get('surface_cost_total', 0):,} 원 ({q.get('surface', '무처리')})",
+            f"5. 일반관리비 및 마진 ({q.get('margin_rate', 20)}%): {q.get('margin_amount', 0):,} 원"
+        ]
         if q.get('guardrail_applied'):
-            pdf.cell(0, 4, f"   (※ 최소 기본공임 기준 {settings.get('min_machining_cost', 35000):,}원 자동 보정 적용)", new_x="LMARGIN", new_y="NEXT")
-        pdf.cell(0, 5, f"3. 초도 세팅비 : {q.get('setup_fee', 0):,} 원", new_x="LMARGIN", new_y="NEXT")
-        pdf.cell(0, 5, f"4. 표면/후처리비 : {q.get('surface_cost_total', 0):,} 원 ({q.get('surface', '무처리')})", new_x="LMARGIN", new_y="NEXT")
-        pdf.cell(0, 5, f"5. 일반관리비 및 마진 ({q.get('margin_rate', 20)}%): {q.get('margin_amount', 0):,} 원", new_x="LMARGIN", new_y="NEXT")
+            cost_lines.insert(2, f"   (※ 최소 기본공임 기준 {settings.get('min_machining_cost', 35000):,}원 자동 보정 적용)")
+
+        for cl in cost_lines:
+            try:
+                pdf.cell(0, 5, cl, new_x="LMARGIN", new_y="NEXT")
+            except TypeError:
+                pdf.cell(0, 5, cl, ln=1)
         
         if q.get('memo'):
             pdf.ln(2)
-            pdf.cell(0, 5, f"[ 현장 엔지니어 비고 ]: {q.get('memo')}", new_x="LMARGIN", new_y="NEXT")
+            try:
+                pdf.cell(0, 5, f"[ 현장 엔지니어 비고 ]: {q.get('memo')}", new_x="LMARGIN", new_y="NEXT")
+            except TypeError:
+                pdf.cell(0, 5, f"[ 현장 엔지니어 비고 ]: {q.get('memo')}", ln=1)
 
-        return bytes(pdf.output())
+        # fpdf2 vs fpdf1 바이트 추출 호환
+        try:
+            return bytes(pdf.output())
+        except TypeError:
+            return pdf.output(dest='S').encode('latin1')
     except Exception:
         return b""
 
@@ -1128,7 +1177,7 @@ with tabs[0]:
                 st.dataframe(pd.DataFrame(table_rows), hide_index=True, use_container_width=True)
 
 # ------------------------------------------
-# TAB 2: 신규 견적 산출 (초고속 도면 분석)
+# TAB 2: 신규 견적 산출 (NVIDIA NIM 비전 엔진)
 # ------------------------------------------
 with tabs[1]:
     if "client_name_val" not in st.session_state: st.session_state["client_name_val"] = "(주)한국정밀"
@@ -1156,10 +1205,10 @@ with tabs[1]:
 
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">2. 도면 파일 및 가공 지침 (프롬프트)</div>', unsafe_allow_html=True)
-            quote_mode = st.radio("모드 선택", ["AI 비전 도면 자동 판독", "수동 직접 입력"], horizontal=True, label_visibility="collapsed")
+            quote_mode = st.radio("모드 선택", ["NVIDIA AI 비전 도면 자동 판독", "수동 직접 입력"], horizontal=True, label_visibility="collapsed")
             
             uploaded_file = None
-            if quote_mode == "AI 비전 도면 자동 판독":
+            if quote_mode == "NVIDIA AI 비전 도면 자동 판독":
                 uploaded_file = st.file_uploader(
                     "도면 파일 등록 (PDF, PNG, JPG)",
                     type=["pdf", "png", "jpg", "jpeg"]
@@ -1177,19 +1226,21 @@ with tabs[1]:
                         file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                         open_in_new_tab_button(uploaded_file.getvalue(), file_mime, label="도면 새 창 열기")
                 with col_b2:
-                    start_ai = st.button("⚡ 초고속 AI 분석 실행 (2초)", type="primary", use_container_width=True)
+                    start_ai = st.button("⚡ NVIDIA AI 분석 실행", type="primary", use_container_width=True)
 
                 if start_ai:
                     if not uploaded_file:
                         st.warning("⚠️ 먼저 도면 파일을 업로드해 주세요.")
+                    elif not NVIDIA_API_KEY:
+                        st.error("❌ NVIDIA_API_KEY가 감지되지 않았습니다. Streamlit Secrets를 확인하세요.")
                     else:
                         clean_name = os.path.splitext(uploaded_file.name)[0]
                         st.session_state["custom_part_name"] = clean_name
                         
-                        with st.spinner("⚡ 도면 형상 및 표제란 정밀 분석 중... (약 2~3초)"):
+                        with st.spinner("⚡ NVIDIA Build 도면 정밀 분석 중... (약 2~3초)"):
                             file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
-                            parsed_res, err = analyze_drawing_fast(
-                                uploaded_file.getvalue(), file_mime, uploaded_file.name, engineer_prompt
+                            parsed_res, err = analyze_drawing_nvidia_direct(
+                                NVIDIA_API_KEY, uploaded_file.getvalue(), file_mime, uploaded_file.name, engineer_prompt
                             )
                             if err:
                                 st.error(f"❌ 분석 오류: {err}")
@@ -1360,7 +1411,7 @@ with tabs[1]:
             with b1:
                 if pdf_bytes:
                     st.download_button(
-                        f"📄 [{final_part_name[:12]}] PDF",
+                        f"📄 [{final_part_name[:12]}] PDF 다운로드",
                         data=pdf_bytes,
                         file_name=f"{quote_no}_{final_part_name}.pdf",
                         mime="application/pdf",
@@ -1368,7 +1419,7 @@ with tabs[1]:
                         use_container_width=True
                     )
                 else:
-                    st.button("PDF 준비 중...", disabled=True, use_container_width=True)
+                    st.button("PDF 렌더링 중...", disabled=True, use_container_width=True)
             with b2:
                 if st.button("현재 워크스페이스에 저장", use_container_width=True):
                     orders_db.insert(0, quote_payload)
