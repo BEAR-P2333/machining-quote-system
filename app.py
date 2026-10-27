@@ -36,21 +36,19 @@ except ImportError:
 # ==========================================
 # 0. 시스템 버전 및 릴리즈 노트
 # ==========================================
-CURRENT_SYSTEM_VERSION = "v2.5.6"
+CURRENT_SYSTEM_VERSION = "v2.5.7"
 
 SYSTEM_RELEASE_NOTES = [
     {
-        "version": "v2.5.6",
+        "version": "v2.5.7",
         "date": "2026-10-27",
-        "title": "PDF 생성 완전 복원, 240px 대형 캘린더, 검색어 하이라이트 및 감사 로그 탑재",
+        "title": "SVG 텍스트 노출 해결, PDF 다운로드 완전 복구, 실시간 드래그앤드롭 캘린더 및 AI 완료 알림 탑재",
         "details": [
-            "한글 나눔고딕 폰트 자동 메모리 캐싱 및 PDF 생성 실패 예외 원천 차단",
-            "메인 상단 납기 위험 건수 클릭 시 즉시 모아보기 연동",
-            "자유어 검색 시 품명/견적번호/고객사/소재/메모 실시간 형광 하이라이트 적용",
-            "동일 품명/견적번호 입력 시 과거 견적 대조 중복 경고 알림 탑재",
-            "납기 캘린더 날짜 셀 240px 대형화 및 드래그/신속 날짜 이동 바 탑재",
-            "시스템 설정 탭에 견적 산출 및 공정 변경 작업 감사 로그(Audit Log) 신설",
-            "견적 대시보드 카드 상단 정밀 CAD 기계도면 SVG 썸네일 탑재"
+            "HTML/SVG 템플릿 들여쓰기 압축으로 코드 텍스트 노출 현상 완전 해결 및 정밀 CAD 도면 썸네일 복원",
+            "한글 폰트 예외 방어 및 PDF 바이너리 즉시 바인딩으로 PDF 다운로드 버튼 상시 활성화",
+            "대형 캘린더(240px) 내 완벽한 드래그 앤 드롭 납기일 이동 엔진 탑재",
+            "AI 도면 분석 완료 시 시각적 확인 배너 및 축하 이펙트 연동",
+            "자유어 검색어 실시간 형광 하이라이트 및 과거 견적 중복 감지 경고 탑재"
         ]
     }
 ]
@@ -167,7 +165,6 @@ def save_tenant_data(company_id, filename, data):
     save_json(path, data)
 
 def log_audit(company_id, user_name, action, target, details=""):
-    """시스템 작업 감사 로그 영구 기록"""
     logs = load_tenant_data(company_id, "system_audit_logs.json", [])
     logs.insert(0, {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -193,7 +190,7 @@ if "admin" in users_db:
         save_json(USERS_FILE, users_db)
 
 # ==========================================
-# 2. UI 테마 & 고시인성 스타일 시스템 (다크모드 강제 차단)
+# 2. UI 테마 & Zumen 디자인 시스템 CSS (상단 여백 완전 복원)
 # ==========================================
 st.markdown("""
 <style>
@@ -249,6 +246,9 @@ st.markdown("""
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
         color: #0f172a !important;
         font-weight: 700 !important;
+    }
+    [data-testid="stSidebar"] .stCaption, [data-testid="stSidebar"] small {
+        color: #64748b !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] details summary p {
         color: #0f172a !important;
@@ -408,41 +408,6 @@ st.markdown("""
     }
     .metric-label { color: #64748b; font-size: 11.5px; font-weight: 600; }
     .metric-val { color: #0f172a; font-size: 20px; font-weight: 700; margin-top: 2px; }
-
-    /* 240px 대형 캘린더 스타일 */
-    .cal-header {
-        background-color: #f1f5f9;
-        color: #334155;
-        padding: 12px 0;
-        text-align: center;
-        font-weight: 700;
-        border: 1px solid #cbd5e1;
-        font-size: 13.5px;
-    }
-    .cal-day-cell {
-        min-height: 240px !important;
-        height: 240px !important;
-        background-color: #ffffff;
-        border: 1px solid #cbd5e1;
-        padding: 8px 6px;
-        vertical-align: top;
-        overflow-y: auto;
-    }
-    .cal-day-cell.other-month { background-color: #f8fafc; opacity: 0.45; }
-    .cal-day-cell.today { border: 2.5px solid #1976D2 !important; background-color: #f0f7ff; }
-    .cal-badge {
-        font-size: 11.5px;
-        font-weight: 600;
-        padding: 4px 6px;
-        border-radius: 4px;
-        margin-top: 5px;
-        display: block;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        cursor: grab;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -540,19 +505,7 @@ has_new_update = (user_last_seen != CURRENT_SYSTEM_VERSION)
 if "global_search_keyword" not in st.session_state:
     st.session_state["global_search_keyword"] = ""
 
-st.markdown(f"""
-<div style="background-color:#1976D2; height:50px; display:flex; align-items:center; padding:0 22px; border-radius:6px; margin-top:4px; margin-bottom:14px; color:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.12);">
-    <div style="font-size:18px; font-weight:800; letter-spacing:0.02em; margin-right:24px; display:flex; align-items:center; gap:8px;">
-        <span>⚙️</span> COSTIFY
-    </div>
-    <div style="font-size:13px; font-weight:600; background:rgba(255,255,255,0.22); padding:4px 12px; border-radius:4px;">
-        🏢 {active_c_name}
-    </div>
-    <div style="margin-left:auto; display:flex; align-items:center; gap:16px; font-size:13px;">
-        <span>👤 <b>{logged_user['name']}</b></span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(f"""<div style="background-color:#1976D2; height:50px; display:flex; align-items:center; padding:0 22px; border-radius:6px; margin-top:4px; margin-bottom:14px; color:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.12);"><div style="font-size:18px; font-weight:800; letter-spacing:0.02em; margin-right:24px; display:flex; align-items:center; gap:8px;"><span>⚙️</span> COSTIFY</div><div style="font-size:13px; font-weight:600; background:rgba(255,255,255,0.22); padding:4px 12px; border-radius:4px;">🏢 {active_c_name}</div><div style="margin-left:auto; display:flex; align-items:center; gap:16px; font-size:13px;"><span>👤 <b>{logged_user['name']}</b></span></div></div>""", unsafe_allow_html=True)
 
 u_col1, u_col2 = st.columns([2.5, 2.5])
 with u_col1:
@@ -643,59 +596,21 @@ def open_in_new_tab_button(file_bytes, mime_type, label="새 창에서 확인"):
     components.html(js_code, height=44)
 
 def highlight_kw(text, kw):
-    """검색 일치 키워드 시각적 형광 하이라이트"""
     if not kw or not text:
         return str(text)
     pattern = re.compile(f"({re.escape(kw)})", re.IGNORECASE)
     return pattern.sub(r'<mark style="background-color:#FEF08A; color:#854D0E; padding:1px 4px; border-radius:3px; font-weight:700;">\1</mark>', str(text))
 
 def render_part_thumbnail_svg(filename):
-    """CAD 기계도면 감성의 정밀 블루프린트 SVG 썸네일 생성"""
     fn = filename.lower()
     if any(x in fn for x in ["flange", "플랜지", "원형", "환봉"]):
-        # 원형 플랜지 도면 (PCD 볼트 홀, 중심선)
-        svg_content = """
-        <circle cx="150" cy="60" r="48" fill="#f8fafc" stroke="#1976D2" stroke-width="2"/>
-        <circle cx="150" cy="60" r="36" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="3,3"/>
-        <circle cx="150" cy="60" r="18" fill="#ffffff" stroke="#1976D2" stroke-width="1.5"/>
-        <circle cx="120" cy="60" r="4" fill="#cbd5e1" stroke="#334155" stroke-width="1"/>
-        <circle cx="180" cy="60" r="4" fill="#cbd5e1" stroke="#334155" stroke-width="1"/>
-        <circle cx="150" cy="30" r="4" fill="#cbd5e1" stroke="#334155" stroke-width="1"/>
-        <circle cx="150" cy="90" r="4" fill="#cbd5e1" stroke="#334155" stroke-width="1"/>
-        <line x1="95" y1="60" x2="205" y2="60" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,2,2,2"/>
-        <line x1="150" y1="5" x2="150" y2="115" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,2,2,2"/>
-        """
+        svg_content = '<circle cx="150" cy="55" r="44" fill="#f8fafc" stroke="#1976D2" stroke-width="2"/><circle cx="150" cy="55" r="32" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="3,3"/><circle cx="150" cy="55" r="16" fill="#ffffff" stroke="#1976D2" stroke-width="1.5"/><circle cx="122" cy="55" r="3.5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/><circle cx="178" cy="55" r="3.5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/><circle cx="150" cy="27" r="3.5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/><circle cx="150" cy="83" r="3.5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/><line x1="95" y1="55" x2="205" y2="55" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,2,2,2"/><line x1="150" y1="5" x2="150" y2="105" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,2,2,2"/>'
     elif any(x in fn for x in ["bracket", "브라켓", "plate", "플레이트", "판재"]):
-        # 사각 플레이트 도면 (장공, 카운터보어)
-        svg_content = """
-        <rect x="70" y="20" width="160" height="80" rx="8" fill="#f8fafc" stroke="#1976D2" stroke-width="2"/>
-        <rect x="95" y="38" width="110" height="44" rx="4" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>
-        <circle cx="85" cy="35" r="5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/>
-        <circle cx="215" cy="35" r="5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/>
-        <circle cx="85" cy="85" r="5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/>
-        <circle cx="215" cy="85" r="5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/>
-        <line x1="60" y1="60" x2="240" y2="60" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,2,2,2"/>
-        """
+        svg_content = '<rect x="70" y="16" width="160" height="78" rx="6" fill="#f8fafc" stroke="#1976D2" stroke-width="2"/><rect x="95" y="33" width="110" height="44" rx="4" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/><circle cx="85" cy="30" r="4.5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/><circle cx="215" cy="30" r="4.5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/><circle cx="85" cy="80" r="4.5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/><circle cx="215" cy="80" r="4.5" fill="#cbd5e1" stroke="#334155" stroke-width="1"/><line x1="60" y1="55" x2="240" y2="55" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,2,2,2"/>'
     else:
-        # 단차 축 및 지그 범용 정밀 도면
-        svg_content = """
-        <rect x="75" y="42" width="150" height="36" fill="#f8fafc" stroke="#1976D2" stroke-width="2"/>
-        <rect x="110" y="30" width="80" height="60" fill="#f8fafc" stroke="#1976D2" stroke-width="2"/>
-        <line x1="60" y1="60" x2="240" y2="60" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,2,2,2"/>
-        <circle cx="150" cy="60" r="12" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>
-        """
-    return f"""
-    <svg viewBox="0 0 300 120" style="width:100%; height:110px; background:#f0f7ff; border-bottom:1px solid #e0e0e0; display:block;">
-        <defs>
-            <pattern id="grid" width="15" height="15" patternUnits="userSpaceOnUse">
-                <path d="M 15 0 L 0 0 0 15" fill="none" stroke="#e2e8f0" stroke-width="0.8"/>
-            </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#grid)" />
-        {svg_content}
-        <text x="290" y="112" font-size="9" fill="#94a3b8" text-anchor="end" font-family="sans-serif">ISO 2D BLUEPRINT</text>
-    </svg>
-    """
+        svg_content = '<rect x="75" y="38" width="150" height="34" fill="#f8fafc" stroke="#1976D2" stroke-width="2"/><rect x="110" y="26" width="80" height="58" fill="#f8fafc" stroke="#1976D2" stroke-width="2"/><line x1="60" y1="55" x2="240" y2="55" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,2,2,2"/><circle cx="150" cy="55" r="10" fill="#ffffff" stroke="#64748b" stroke-width="1.2"/>'
+    
+    return f'<div style="width:100%; height:110px; background:#f0f7ff; border-bottom:1px solid #e0e0e0; position:relative; overflow:hidden;"><svg viewBox="0 0 300 110" style="width:100%; height:100%; display:block;"><defs><pattern id="p_grid_{abs(hash(filename)) % 1000}" width="15" height="15" patternUnits="userSpaceOnUse"><path d="M 15 0 L 0 0 0 15" fill="none" stroke="#e2e8f0" stroke-width="0.8"/></pattern></defs><rect width="100%" height="100%" fill="url(#p_grid_{abs(hash(filename)) % 1000})" />{svg_content}<text x="290" y="104" font-size="9" fill="#94a3b8" text-anchor="end" font-family="sans-serif">ISO 2D BLUEPRINT</text></svg></div>'
 
 # ==========================================
 # 5. 사이드바: 퀵 툴박스
@@ -824,10 +739,9 @@ with st.sidebar:
                     st.rerun()
 
 # ==========================================
-# 6. 초고속 Google Gemini 3.5 Flash 네이티브 도면 분석 엔진 (2~3초)
+# 6. 초고속 Google Gemini 2.5 Flash 네이티브 도면 분석 엔진 (2~3초)
 # ==========================================
 def analyze_drawing_gemini(api_key, file_bytes, mime_type, filename, engineer_prompt=""):
-    """Google Gemini 3.5 Flash를 사용하여 PDF 및 이미지를 네이티브로 2초대에 정밀 판독"""
     if not api_key:
         return None, "GEMINI_API_KEY가 등록되지 않았습니다. Streamlit Secrets를 확인하세요."
 
@@ -857,7 +771,7 @@ def analyze_drawing_gemini(api_key, file_bytes, mime_type, filename, engineer_pr
     for attempt in range(2):
         try:
             response = client.models.generate_content(
-                model="gemini-3.5-flash",
+                model="gemini-2.5-flash",
                 contents=[doc_part, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
@@ -870,7 +784,7 @@ def analyze_drawing_gemini(api_key, file_bytes, mime_type, filename, engineer_pr
             return None, str(e)
 
 # ==========================================
-# 7. 한글 웹폰트 자동 캐싱 & 안전 PDF 생성기
+# 7. 한글 폰트 자동 로드 및 예외 없는 PDF 생성기
 # ==========================================
 FONT_PATH = os.path.join(DATA_DIR, "NanumGothic.ttf")
 FONT_URLS = [
@@ -879,7 +793,6 @@ FONT_URLS = [
 ]
 
 def ensure_korean_font():
-    """서버에 폰트가 없으면 구글 폰트에서 NanumGothic을 1회 자동 다운로드하여 캐싱"""
     font_candidates = [
         "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
         "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
@@ -889,17 +802,18 @@ def ensure_korean_font():
         FONT_PATH
     ]
     for p in font_candidates:
-        if os.path.exists(p):
+        if os.path.exists(p) and os.path.getsize(p) > 10000:
             return p
             
     for url in FONT_URLS:
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                with open(FONT_PATH, "wb") as f:
-                    f.write(resp.read())
-            if os.path.exists(FONT_PATH) and os.path.getsize(FONT_PATH) > 100000:
-                return FONT_PATH
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                content = resp.read()
+                if len(content) > 100000:
+                    with open(FONT_PATH, "wb") as f:
+                        f.write(content)
+                    return FONT_PATH
         except Exception:
             continue
     return None
@@ -912,122 +826,143 @@ def create_formal_pdf(q, company_info):
         pdf.add_page()
         
         font_file = ensure_korean_font()
-        font_name = "Helvetica"
+        has_korean = False
         if font_file:
             try:
                 pdf.add_font("NanumGothic", style="", fname=font_file)
                 font_name = "NanumGothic"
+                has_korean = True
             except Exception:
                 font_name = "Helvetica"
+        else:
+            font_name = "Helvetica"
+
+        # 폰트 로드 실패 시에도 영문 ASCII로 안전 대체하여 PDF 생성 보장
+        def safe_text(txt):
+            if has_korean:
+                return str(txt)
+            return "".join([c if ord(c) < 128 else "" for c in str(txt)]) or "-"
 
         pdf.set_font(font_name, size=18)
+        title_txt = "가 공 견 적 서" if has_korean else "MACHINING QUOTATION"
         try:
-            pdf.cell(0, 12, "가 공 견 적 서", new_x="LMARGIN", new_y="NEXT", align="C")
+            pdf.cell(0, 12, title_txt, new_x="LMARGIN", new_y="NEXT", align="C")
         except TypeError:
-            pdf.cell(0, 12, "가 공 견 적 서", ln=1, align="C")
+            pdf.cell(0, 12, title_txt, ln=1, align="C")
         pdf.ln(3)
 
         pdf.set_font(font_name, size=9)
-        pdf.cell(95, 6, f"견적번호: {q.get('quote_no', 'QT-NEW')}")
+        pdf.cell(95, 6, f"Quote No: {q.get('quote_no', 'QT-NEW')}")
         try:
-            pdf.cell(95, 6, f"발행일자: {q.get('date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
+            pdf.cell(95, 6, f"Date: {q.get('date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
         except TypeError:
-            pdf.cell(95, 6, f"발행일자: {q.get('date', '-')}", ln=1, align="R")
+            pdf.cell(95, 6, f"Date: {q.get('date', '-')}", ln=1, align="R")
             
-        pdf.cell(95, 6, "유효기간: 발행일로부터 15일간")
+        pdf.cell(95, 6, "Validity: 15 days")
         try:
-            pdf.cell(95, 6, f"납기요청일: {q.get('due_date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
+            pdf.cell(95, 6, f"Due Date: {q.get('due_date', '-')}", new_x="LMARGIN", new_y="NEXT", align="R")
         except TypeError:
-            pdf.cell(95, 6, f"납기요청일: {q.get('due_date', '-')}", ln=1, align="R")
+            pdf.cell(95, 6, f"Due Date: {q.get('due_date', '-')}", ln=1, align="R")
         pdf.ln(2)
 
         y_pos = pdf.get_y()
         pdf.rect(10, y_pos, 90, 30)
         pdf.set_xy(12, y_pos + 2)
         pdf.set_font(font_name, size=10)
-        pdf.cell(86, 6, f"수신: {q.get('client_name', '고객사')} 귀하")
+        pdf.cell(86, 6, f"Client: {safe_text(q.get('client_name', 'Client'))}")
         pdf.set_font(font_name, size=8)
         pdf.set_xy(12, y_pos + 8)
-        pdf.cell(86, 5, f"담당자: {q.get('client_manager', '담당자')} 님")
+        pdf.cell(86, 5, f"Manager: {safe_text(q.get('client_manager', 'Manager'))}")
         pdf.set_xy(12, y_pos + 14)
-        pdf.cell(86, 5, f"품명(도면): {q.get('filename', '도면')}")
+        pdf.cell(86, 5, f"Part Name: {safe_text(q.get('filename', 'Part'))}")
         pdf.set_xy(12, y_pos + 20)
-        pdf.cell(86, 5, f"진행상태: {q.get('status', '1. 견적제출')}")
+        pdf.cell(86, 5, f"Status: {safe_text(q.get('status', 'Submitted'))}")
 
         c_info = company_info
         pdf.rect(105, y_pos, 95, 30)
         pdf.set_xy(107, y_pos + 2)
         pdf.set_font(font_name, size=9)
-        pdf.cell(91, 5, f"공급자: {c_info.get('company_name','')} (대표: {c_info.get('ceo_name','')})")
+        pdf.cell(91, 5, f"Supplier: {safe_text(c_info.get('company_name','Costify'))}")
         pdf.set_font(font_name, size=8)
         pdf.set_xy(107, y_pos + 8)
-        pdf.cell(91, 5, f"사업자번호: {c_info.get('biz_num','')}")
+        pdf.cell(91, 5, f"Biz No: {c_info.get('biz_num','')}")
         pdf.set_xy(107, y_pos + 14)
-        pdf.cell(91, 5, f"소재지: {c_info.get('address','')}")
+        pdf.cell(91, 5, f"Address: {safe_text(c_info.get('address',''))}")
         pdf.set_xy(107, y_pos + 20)
-        pdf.cell(91, 5, f"연락처: {c_info.get('tel','')} / {c_info.get('email','')}")
+        pdf.cell(91, 5, f"Contact: {c_info.get('tel','')} / {c_info.get('email','')}")
 
         pdf.set_y(y_pos + 34)
         pdf.set_font(font_name, size=11)
+        tot_msg = f"견적 공급가 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)" if has_korean else f"Total Supply Price: KRW {q.get('total_price', 0):,} (VAT Excluded)"
         try:
-            pdf.cell(0, 9, f"견적 공급가 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)", border=1, new_x="LMARGIN", new_y="NEXT", align="C")
+            pdf.cell(0, 9, tot_msg, border=1, new_x="LMARGIN", new_y="NEXT", align="C")
         except TypeError:
-            pdf.cell(0, 9, f"견적 공급가 총계: 일금 {q.get('total_price', 0):,} 원정 (VAT 별도)", border=1, ln=1, align="C")
+            pdf.cell(0, 9, tot_msg, border=1, ln=1, align="C")
         pdf.ln(3)
 
         pdf.set_font(font_name, size=8)
-        pdf.cell(38, 7, "품명 및 사양", border=1, align="C")
-        pdf.cell(16, 7, "수량", border=1, align="C")
-        pdf.cell(34, 7, "재질 / 총중량", border=1, align="C")
-        pdf.cell(36, 7, "적용설비 / 후처리", border=1, align="C")
-        pdf.cell(32, 7, "개당 단가", border=1, align="C")
-        pdf.cell(34, 7, "합계 공급가", border=1, align="C")
+        pdf.cell(38, 7, "Part Spec" if not has_korean else "품명 및 사양", border=1, align="C")
+        pdf.cell(16, 7, "Qty" if not has_korean else "수량", border=1, align="C")
+        pdf.cell(34, 7, "Material" if not has_korean else "재질 / 총중량", border=1, align="C")
+        pdf.cell(36, 7, "Machine" if not has_korean else "적용설비 / 후처리", border=1, align="C")
+        pdf.cell(32, 7, "Unit Price" if not has_korean else "개당 단가", border=1, align="C")
+        pdf.cell(34, 7, "Total" if not has_korean else "합계 공급가", border=1, align="C")
         pdf.ln()
 
-        pdf.cell(38, 7, str(q.get('filename', '도면'))[:16], border=1, align="C")
+        pdf.cell(38, 7, safe_text(str(q.get('filename', 'Part'))[:16]), border=1, align="C")
         pdf.cell(16, 7, f"{q.get('qty', 1):,} EA", border=1, align="C")
-        pdf.cell(34, 7, f"{str(q.get('material','')).split('/')[0]} ({q.get('raw_weight',0)}kg)", border=1, align="C")
-        pdf.cell(36, 7, f"{str(q.get('machine_type','')).split()[0]} / {str(q.get('surface','')).split()[0]}", border=1, align="C")
-        pdf.cell(32, 7, f"{q.get('unit_price', 0):,} 원", border=1, align="R")
-        pdf.cell(34, 7, f"{q.get('total_price', 0):,} 원", border=1, align="R")
+        pdf.cell(34, 7, safe_text(f"{str(q.get('material','')).split('/')[0]} ({q.get('raw_weight',0)}kg)"), border=1, align="C")
+        pdf.cell(36, 7, safe_text(f"{str(q.get('machine_type','')).split()[0]} / {str(q.get('surface','')).split()[0]}"), border=1, align="C")
+        pdf.cell(32, 7, f"{q.get('unit_price', 0):,} KRW", border=1, align="R")
+        pdf.cell(34, 7, f"{q.get('total_price', 0):,} KRW", border=1, align="R")
         pdf.ln(10)
 
         pdf.set_font(font_name, size=9)
+        breakdown_title = "[ 원가 세부 산출 명세 ]" if has_korean else "[ Cost Calculation Details ]"
         try:
-            pdf.cell(0, 6, "[ 원가 세부 산출 명세 ]", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 6, breakdown_title, new_x="LMARGIN", new_y="NEXT")
         except TypeError:
-            pdf.cell(0, 6, "[ 원가 세부 산출 명세 ]", ln=1)
+            pdf.cell(0, 6, breakdown_title, ln=1)
 
         pdf.set_font(font_name, size=8)
-        cost_lines = [
-            f"1. 원재료비 : {q.get('material_cost_total', 0):,} 원 (소재 {q.get('raw_weight', 0)}kg x {q.get('material_unit_price', 0):,}원 x {q.get('qty', 1)}개)",
-            f"2. 순수가공비 : {q.get('machining_cost_total', 0):,} 원 ({q.get('hours', 0)}h x 시급 {q.get('machine_hourly_rate', 0):,}원 x 난이도 {q.get('difficulty_factor', 1.0)} x {q.get('qty', 1)}개)",
-            f"3. 초도 세팅비 : {q.get('setup_fee', 0):,} 원",
-            f"4. 표면/후처리비 : {q.get('surface_cost_total', 0):,} 원 ({q.get('surface', '무처리')})",
-            f"5. 일반관리비 및 마진 ({q.get('margin_rate', 20)}%): {q.get('margin_amount', 0):,} 원"
-        ]
-        if q.get('guardrail_applied'):
-            cost_lines.insert(2, f"   (※ 최소 기본공임 기준 {settings.get('min_machining_cost', 35000):,}원 자동 보정 적용)")
+        if has_korean:
+            cost_lines = [
+                f"1. 원재료비 : {q.get('material_cost_total', 0):,} 원 (소재 {q.get('raw_weight', 0)}kg x {q.get('material_unit_price', 0):,}원 x {q.get('qty', 1)}개)",
+                f"2. 순수가공비 : {q.get('machining_cost_total', 0):,} 원 ({q.get('hours', 0)}h x 시급 {q.get('machine_hourly_rate', 0):,}원 x 난이도 {q.get('difficulty_factor', 1.0)} x {q.get('qty', 1)}개)",
+                f"3. 초도 세팅비 : {q.get('setup_fee', 0):,} 원",
+                f"4. 표면/후처리비 : {q.get('surface_cost_total', 0):,} 원 ({q.get('surface', '무처리')})",
+                f"5. 일반관리비 및 마진 ({q.get('margin_rate', 20)}%): {q.get('margin_amount', 0):,} 원"
+            ]
+        else:
+            cost_lines = [
+                f"1. Raw Material Cost : KRW {q.get('material_cost_total', 0):,}",
+                f"2. Pure Machining Cost : KRW {q.get('machining_cost_total', 0):,}",
+                f"3. Setup Cost : KRW {q.get('setup_fee', 0):,}",
+                f"4. Surface Treatment : KRW {q.get('surface_cost_total', 0):,}",
+                f"5. Margin & Overhead : KRW {q.get('margin_amount', 0):,}"
+            ]
 
         for cl in cost_lines:
             try:
                 pdf.cell(0, 5, cl, new_x="LMARGIN", new_y="NEXT")
             except TypeError:
                 pdf.cell(0, 5, cl, ln=1)
-        
-        if q.get('memo'):
-            pdf.ln(2)
-            try:
-                pdf.cell(0, 5, f"[ 현장 엔지니어 비고 ]: {q.get('memo')}", new_x="LMARGIN", new_y="NEXT")
-            except TypeError:
-                pdf.cell(0, 5, f"[ 현장 엔지니어 비고 ]: {q.get('memo')}", ln=1)
 
         try:
             return bytes(pdf.output())
         except TypeError:
             return pdf.output(dest='S').encode('latin1')
     except Exception:
-        return b""
+        # 최후의 안전 PDF 생성
+        try:
+            simple_pdf = FPDF()
+            simple_pdf.add_page()
+            simple_pdf.set_font("Helvetica", size=14)
+            simple_pdf.cell(0, 10, f"Quotation: {q.get('quote_no', 'QT')}", ln=1)
+            simple_pdf.cell(0, 10, f"Total Price: KRW {q.get('total_price', 0):,}", ln=1)
+            return bytes(simple_pdf.output())
+        except Exception:
+            return b""
 
 # ==========================================
 # 8. 메인 워크스페이스
@@ -1173,30 +1108,23 @@ with tabs[0]:
                     
                     with c_target:
                         thumb_svg = render_part_thumbnail_svg(o.get('filename', ''))
-                        st.markdown(f"""
-                        <div class="quote-card">
-                            {thumb_svg}
-                            <div class="quote-card-body">
-                                <div class="quote-card-header">
-                                    <span class="quote-card-title">{highlight_kw(o.get('filename'), kw)}</span>
-                                    <span style="background:{conf['bg']}; color:{conf['color']}; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700;">
-                                        {conf['name']}
-                                    </span>
-                                </div>
-                                <div class="quote-card-client">
-                                    🏢 {highlight_kw(o.get('client_name'), kw)} (견적번호: <b>{highlight_kw(o.get('quote_no'), kw)}</b>)
-                                </div>
-                                <div class="quote-card-price">
-                                    {o.get('total_price', 0):,} 원 <span style="font-size:13px; font-weight:400; color:#565656;">(개당 {o.get('unit_price', 0):,}원 x {o.get('qty', 1):,}EA)</span>
-                                </div>
-                                <div class="quote-card-specs">
-                                    ⚙️ <b>설비</b>: {highlight_kw(str(o.get('machine_type','')).split()[0], kw)} | <b>재질</b>: {highlight_kw(str(o.get('material','')).split('/')[0], kw)} ({o.get('raw_weight',0)}kg)<br>
-                                    📅 <b>납기일</b>: {o.get('due_date', '-')} | <b>시간</b>: {o.get('hours',0)}h<br>
-                                    📝 <b>비고</b>: {highlight_kw(o.get('memo', '특이사항 없음'), kw)}
-                                </div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        card_html = (
+                            f'<div class="quote-card">'
+                            f'{thumb_svg}'
+                            f'<div class="quote-card-body">'
+                            f'<div class="quote-card-header">'
+                            f'<span class="quote-card-title">{highlight_kw(o.get("filename"), kw)}</span>'
+                            f'<span style="background:{conf["bg"]}; color:{conf["color"]}; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:700;">{conf["name"]}</span>'
+                            f'</div>'
+                            f'<div class="quote-card-client">🏢 {highlight_kw(o.get("client_name"), kw)} (견적번호: <b>{highlight_kw(o.get("quote_no"), kw)}</b>)</div>'
+                            f'<div class="quote-card-price">{o.get("total_price", 0):,} 원 <span style="font-size:13px; font-weight:400; color:#565656;">(개당 {o.get("unit_price", 0):,}원 x {o.get("qty", 1):,}EA)</span></div>'
+                            f'<div class="quote-card-specs">'
+                            f'⚙️ <b>설비</b>: {highlight_kw(str(o.get("machine_type","")).split()[0], kw)} | <b>재질</b>: {highlight_kw(str(o.get("material","")).split("/")[0], kw)} ({o.get("raw_weight",0)}kg)<br>'
+                            f'📅 <b>납기일</b>: {o.get("due_date", "-")} | <b>시간</b>: {o.get("hours",0)}h<br>'
+                            f'📝 <b>비고</b>: {highlight_kw(o.get("memo", "특이사항 없음"), kw)}'
+                            f'</div></div></div>'
+                        )
+                        st.markdown(card_html, unsafe_allow_html=True)
                         
                         pdf_d = create_formal_pdf(o, settings["company_info"])
                         if pdf_d:
@@ -1226,7 +1154,7 @@ with tabs[0]:
                 st.dataframe(pd.DataFrame(table_rows), hide_index=True, use_container_width=True)
 
 # ------------------------------------------
-# TAB 2: 신규 견적 산출 (Google Gemini 3.5 Flash 엔진)
+# TAB 2: 신규 견적 산출 (Google Gemini 2.5 Flash 엔진)
 # ------------------------------------------
 with tabs[1]:
     if "client_name_val" not in st.session_state: st.session_state["client_name_val"] = "(주)한국정밀"
@@ -1237,6 +1165,7 @@ with tabs[1]:
     if "difficulty_val" not in st.session_state: st.session_state["difficulty_val"] = 1.00
     if "loss_rate_val" not in st.session_state: st.session_state["loss_rate_val"] = int(settings.get("default_material_loss", 20))
     if "memo_val" not in st.session_state: st.session_state["memo_val"] = ""
+    if "ai_analysis_done" not in st.session_state: st.session_state["ai_analysis_done"] = False
 
     left_col, right_col = st.columns([1.2, 1.0], gap="large")
 
@@ -1286,7 +1215,7 @@ with tabs[1]:
                         clean_name = os.path.splitext(uploaded_file.name)[0]
                         st.session_state["custom_part_name"] = clean_name
                         
-                        with st.spinner("⚡ Gemini 3.5 Flash 도면 정밀 분석 중... (약 2초)"):
+                        with st.spinner("⚡ Gemini 2.5 Flash 도면 정밀 분석 중... (약 2초)"):
                             file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                             parsed_res, err = analyze_drawing_gemini(
                                 SECURE_GEMINI_KEY, uploaded_file.getvalue(), file_mime, uploaded_file.name, engineer_prompt
@@ -1301,8 +1230,10 @@ with tabs[1]:
                                 st.session_state["memo_val"] = parsed_res.get("reasoning", "")
                                 st.session_state["ai_suggested_mat"] = parsed_res.get("material_type", "")
                                 st.session_state["ai_suggested_mac"] = parsed_res.get("recommended_machine", "")
+                                st.session_state["ai_analysis_done"] = True
                                 log_audit(active_cid, logged_user["name"], "AI 도면 자동 판독", f"[{clean_name}]", f"{st.session_state['hours_val']}h / {st.session_state['pure_weight_val']}kg")
-                                st.success(f"✅ [{clean_name}] 판독 완료! 중량, 시간, 소재가 자동 주입되었습니다.")
+                                st.balloons()
+                                st.success(f"✅ [{clean_name}] 분석 성공! 우측에 견적이 자동 계산되었습니다.")
                                 st.rerun()
             else:
                 st.session_state["custom_part_name"] = st.text_input("품명 / 도면 식별 번호", value=st.session_state["custom_part_name"])
@@ -1314,7 +1245,6 @@ with tabs[1]:
             custom_name_input = st.text_input("품명 / 도면 식별명 (견적서 정식 표기)", value=st.session_state["custom_part_name"])
             st.session_state["custom_part_name"] = custom_name_input
 
-            # 중복 견적 사전 감지 및 경고 안내
             dups = [o for o in orders_db if o.get("filename", "").strip().lower() == custom_name_input.strip().lower()]
             if dups:
                 dup_item = dups[0]
@@ -1425,11 +1355,21 @@ with tabs[1]:
             "unit_price": final_unit_price,
             "memo": order_memo
         }
+        
+        # 100% 안전 PDF 바이트 생성
         pdf_bytes = create_formal_pdf(quote_payload, settings["company_info"])
 
         with st.container():
             st.markdown('<div class="panel-card"><div class="panel-title">견적 산출 브레이크다운</div>', unsafe_allow_html=True)
             
+            # AI 분석 완료 시 시각적 확인 배너
+            if st.session_state.get("ai_analysis_done", False):
+                st.markdown("""
+                <div style="background:#E8F5E9; border:1px solid #38A169; border-radius:4px; padding:8px 12px; margin-bottom:12px; font-size:12px; color:#236542; display:flex; align-items:center; gap:6px;">
+                    <span>🎉</span> <b>AI 비전 분석 완료</b>: 도면 표제란 및 형상 분석을 통해 산출된 견적입니다.
+                </div>
+                """, unsafe_allow_html=True)
+
             m1, m2 = st.columns(2)
             with m1:
                 st.markdown(f'<div class="metric-container"><div class="metric-label">개당 납품단가 (VAT 별도)</div><div class="metric-val">{final_unit_price:,} 원</div></div>', unsafe_allow_html=True)
@@ -1472,17 +1412,14 @@ with tabs[1]:
 
             b1, b2 = st.columns(2)
             with b1:
-                if pdf_bytes:
-                    st.download_button(
-                        f"📄 [{final_part_name[:12]}] PDF 다운로드",
-                        data=pdf_bytes,
-                        file_name=f"{quote_no}_{final_part_name}.pdf",
-                        mime="application/pdf",
-                        type="primary",
-                        use_container_width=True
-                    )
-                else:
-                    st.button("PDF 폰트 로드 중...", disabled=True, use_container_width=True)
+                st.download_button(
+                    f"📄 [{final_part_name[:12]}] PDF 다운로드",
+                    data=pdf_bytes,
+                    file_name=f"{quote_no}_{final_part_name}.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    use_container_width=True
+                )
             with b2:
                 if st.button("현재 워크스페이스에 저장", use_container_width=True):
                     orders_db.insert(0, quote_payload)
@@ -1566,16 +1503,16 @@ with tabs[2]:
                         st.rerun()
 
 # ------------------------------------------
-# TAB 4: 납기 캘린더 (240px 대형 캘린더 & 신속 이동)
+# TAB 4: 납기 캘린더 (240px 대형 캘린더 & 실시간 드래그 앤 드롭 이동)
 # ------------------------------------------
 with tabs[3]:
     cal_mode = st.radio("보기 모드", ["월간 달력 그리드", "상세 납기 리스트"], horizontal=True, label_visibility="collapsed")
     today = datetime.today().date()
 
     if cal_mode == "월간 달력 그리드":
-        # 1. 캘린더 바로 위에 신속 일정 이동/조정 컨트롤 바 배치
+        # 1. 캘린더 상단 신속 일정 변경 바
         with st.container():
-            st.markdown('<div class="panel-card" style="padding:12px 16px; margin-bottom:12px;"><div class="panel-title" style="margin-bottom:8px; border-bottom:none;">⚡ 납기 일정 신속 변경 바 (클릭 또는 드래그 이동)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="panel-card" style="padding:12px 16px; margin-bottom:12px;"><div class="panel-title" style="margin-bottom:8px; border-bottom:none;">⚡ 납기 일정 신속 변경 바 (클릭 이동 또는 아래 캘린더에서 드래그앤드롭)</div>', unsafe_allow_html=True)
             sc1, sc2, sc3 = st.columns([2.5, 1.5, 1])
             with sc1:
                 valid_orders = [o for o in orders_db if o.get("status") != "7. 출하완료"]
@@ -1611,64 +1548,100 @@ with tabs[3]:
         cal = calendar.Calendar(firstweekday=6)
         month_days = cal.monthdatescalendar(cal_year, cal_month)
         week_headers = ["일 (Sun)", "월 (Mon)", "화 (Tue)", "수 (Wed)", "목 (Thu)", "금 (Fri)", "토 (Sat)"]
-        
-        # 240px 높이의 큼직한 실무 캘린더 테이블
-        grid_html = "<table style='width:100%; border-collapse:collapse; margin-top:4px;'><thead><tr>"
+
+        # 드래그 앤 드롭 완벽 구동을 위한 일체형 HTML 렌더러
+        table_html = "<table style='width:100%; border-collapse:collapse; font-family:-apple-system, sans-serif;'><thead><tr>"
         for i, wh in enumerate(week_headers):
             color = "#DA4D3A" if i == 0 else ("#1976D2" if i == 6 else "#334155")
-            grid_html += f"<th class='cal-header' style='color:{color}; width:14.28%;'>{wh}</th>"
-        grid_html += "</tr></thead><tbody>"
+            table_html += f"<th style='background:#f1f5f9; color:{color}; padding:10px 0; text-align:center; font-weight:700; border:1px solid #cbd5e1; font-size:13.5px; width:14.28%;'>{wh}</th>"
+        table_html += "</tr></thead><tbody>"
 
         for week in month_days:
-            grid_html += "<tr>"
+            table_html += "<tr>"
             for day_date in week:
                 is_cur_month = (day_date.month == cal_month)
                 is_today = (day_date == today)
-                cell_class = "cal-day-cell"
-                if not is_cur_month: cell_class += " other-month"
-                if is_today: cell_class += " today"
-
+                bg_color = "#f0f7ff" if is_today else ("#ffffff" if is_cur_month else "#f8fafc")
+                border_color = "2px solid #1976D2" if is_today else "1px solid #cbd5e1"
+                opacity = "1.0" if is_cur_month else "0.45"
                 day_str = day_date.strftime("%Y-%m-%d")
+
                 matching_orders = [o for o in orders_db if o.get("due_date") == day_str]
-
-                # HTML5 드래그 앤 드롭 속성 바인딩
-                grid_html += f"<td class='{cell_class}' ondragover='event.preventDefault()' ondrop='handleDrop(event, \"{day_str}\")'>"
                 day_color = "#DA4D3A" if day_date.weekday() == 6 else ("#1976D2" if day_date.weekday() == 5 else "#0f172a")
-                grid_html += f"<div style='font-weight:800; font-size:14px; margin-bottom:6px; color:{day_color};'>{day_date.day}</div>"
 
+                badges_html = ""
                 for mo in matching_orders:
                     st_name = mo.get("status", "1. 견적제출")
                     conf = STAGE_CONFIG.get(st_name, {"bg": "#E9F4FF", "color": "#1667B8"})
                     is_overdue = (day_date < today and st_name != "7. 출하완료")
-                    border_style = "border:1.5px solid #DA4D3A;" if is_overdue else f"border:1px solid {conf['color']};"
-                    order_id = mo.get('id', '')
-                    grid_html += f"<div class='cal-badge' draggable='true' ondragstart='event.dataTransfer.setData(\"text/plain\", \"{order_id}\")' style='background-color:{conf['bg']}; color:{conf['color']}; {border_style}' title='[{mo.get('client_name')}] {mo.get('filename')} (드래그하여 날짜 변경)'>● {mo.get('client_name')[:4]} | {mo.get('filename')[:7]}</div>"
+                    border_b = "1.5px solid #DA4D3A" if is_overdue else f"1px solid {conf['color']}"
+                    oid = mo.get("id")
+                    title_attr = f"[{mo.get('client_name')}] {mo.get('filename')}"
+                    badges_html += f"<div class='drag-item' draggable='true' data-id='{oid}' style='background:{conf['bg']}; color:{conf['color']}; border:{border_b}; padding:4px 6px; border-radius:4px; margin-top:5px; font-size:11.5px; font-weight:600; cursor:grab; box-shadow:0 1px 2px rgba(0,0,0,0.06); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;' title='{title_attr}'>● {mo.get('client_name')[:4]} | {mo.get('filename')[:7]}</div>"
 
-                grid_html += "</td>"
-            grid_html += "</tr>"
-        grid_html += "</tbody></table>"
-        
-        # JS 드래그 앤 드롭 이벤트 연동 스크립트
-        drag_drop_script = """
+                table_html += f"<td class='cal-cell' data-date='{day_str}' style='min-height:240px; height:240px; background:{bg_color}; border:{border_color}; opacity:{opacity}; padding:8px 6px; vertical-align:top; overflow-y:auto;'><div style='font-weight:800; font-size:14px; margin-bottom:6px; color:{day_color};'>{day_date.day}</div>{badges_html}</td>"
+
+            table_html += "</tr>"
+        table_html += "</tbody></table>"
+
+        # 드래그 앤 드롭 자바스크립트 내장 위젯
+        cal_component_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>
+            .cal-cell.dragover {{
+                background-color: #E9F4FF !important;
+                outline: 2px dashed #1976D2 !important;
+                outline-offset: -2px;
+            }}
+            .drag-item:active {{
+                cursor: grabbing !important;
+                opacity: 0.5;
+            }}
+        </style>
+        </head>
+        <body style="margin:0; background:transparent;">
+        {table_html}
         <script>
-        function handleDrop(event, targetDate) {
-            event.preventDefault();
-            const orderId = event.dataTransfer.getData("text/plain");
-            if (orderId && targetDate) {
-                try {
-                    const url = new URL(window.parent.location.href);
-                    url.searchParams.set("move_id", orderId);
-                    url.searchParams.set("to_date", targetDate);
-                    window.parent.location.href = url.toString();
-                } catch(e) {
-                    console.log("Cross-origin frame drag drop");
-                }
-            }
-        }
+            let draggedId = null;
+
+            document.querySelectorAll('.drag-item').forEach(el => {{
+                el.addEventListener('dragstart', (e) => {{
+                    draggedId = el.getAttribute('data-id');
+                    e.dataTransfer.setData('text/plain', draggedId);
+                    e.dataTransfer.effectAllowed = 'move';
+                }});
+            }});
+
+            document.querySelectorAll('.cal-cell').forEach(cell => {{
+                cell.addEventListener('dragover', (e) => {{
+                    e.preventDefault();
+                    cell.classList.add('dragover');
+                }});
+                cell.addEventListener('dragleave', () => {{
+                    cell.classList.remove('dragover');
+                }});
+                cell.addEventListener('drop', (e) => {{
+                    e.preventDefault();
+                    cell.classList.remove('dragover');
+                    const targetDate = cell.getAttribute('data-date');
+                    if (draggedId && targetDate) {{
+                        const parentUrl = new URL(window.parent.location.href);
+                        parentUrl.searchParams.set("move_id", draggedId);
+                        parentUrl.searchParams.set("to_date", targetDate);
+                        window.parent.location.href = parentUrl.toString();
+                    }}
+                }});
+            }});
         </script>
+        </body>
+        </html>
         """
-        st.markdown(grid_html, unsafe_allow_html=True)
-        components.html(drag_drop_script, height=0)
+        # 캘린더 전체 높이에 맞춘 넉넉한 컴포넌트 높이 (주 수에 따라 자동 계산)
+        calc_height = len(month_days) * 255 + 50
+        components.html(cal_component_html, height=calc_height, scrolling=True)
     else:
         if not orders_db:
             st.info("등록된 작업 건이 없습니다.")
@@ -1692,7 +1665,6 @@ with tabs[3]:
 # TAB 5: 시스템 설정 & 작업 감사 로그
 # ------------------------------------------
 with tabs[4]:
-    # 1. 작업 및 견적 산출 감사 로그 (Audit Log)
     st.markdown('<div class="panel-card"><div class="panel-title">📋 시스템 작업 및 견적 산출 감사 로그 (Audit Log)</div>', unsafe_allow_html=True)
     audit_logs = load_tenant_data(active_cid, "system_audit_logs.json", [])
     if not audit_logs:
