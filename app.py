@@ -4,7 +4,7 @@ import streamlit as st
 # [중요] 최상단 와이드 레이아웃 강제 지정
 # ==========================================
 st.set_page_config(
-    page_title="Costify | 정밀 절삭가공 AI 견적 시스템 ",
+    page_title="Costify | 정밀 절삭가공 견적 & MES",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -56,7 +56,7 @@ SYSTEM_RELEASE_NOTES = [
     {
         "version": "v2.5.8",
         "date": "2026-10-27",
-        "title": "실제 도면 캡처 썸네일, 상세뷰 및 공정 편집 기능 탑재",
+        "title": "실제 도면 캡처 썸네일, 20년차 공장장 현장 상세뷰 및 공정 편집 기능 탑재",
         "details": [
             "가상 SVG 템플릿 제거 및 업로드된 실제 도면(PDF/이미지) 100% 일치 썸네일 연동",
             "대시보드/캘린더 안건 클릭 시 20년차 공장장 맞춤형 견적 상세 검수 화면 전환",
@@ -204,21 +204,25 @@ if "admin" in users_db:
         save_json(USERS_FILE, users_db)
 
 # ==========================================
-# 2. UI 테마 & Zumen 디자인 시스템 CSS (간격 및 버튼 소형화 반영)
+# 2. UI 테마 & 상용화 브랜딩 (Streamlit 기본 툴바 및 Manage App 완전 은닉)
 # ==========================================
 st.markdown("""
 <style>
+    /* 상용 서비스용: Streamlit 워터마크, 툴바, Manage app 배지 완전 은닉 */
+    #MainMenu { visibility: hidden !important; }
+    header[data-testid="stHeader"] { visibility: hidden !important; height: 0% !important; }
+    footer { visibility: hidden !important; height: 0% !important; }
+    .viewerBadge_container__1QSob, [data-testid="manage-app-button"], .stAppDeployButton, [data-testid="stToolbar"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
     .block-container {
-        padding-top: 4.8rem !important;
+        padding-top: 1.8rem !important;
         padding-bottom: 2.5rem !important;
         padding-left: 2rem !important;
         padding-right: 2rem !important;
         max-width: 100% !important;
-    }
-
-    header[data-testid="stHeader"] {
-        background-color: transparent !important;
-        z-index: 1 !important;
     }
 
     :root, html, body, [data-theme="light"], [data-theme="dark"], [data-testid="stAppViewContainer"], .stApp {
@@ -228,13 +232,14 @@ st.markdown("""
         font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", Roboto, sans-serif !important;
     }
 
-    /* 상단 미니멀 유틸리티 버튼 (업데이트/로그아웃) */
+    /* 상단 미니멀 유틸리티 버튼 (업데이트/로그아웃 50% 축소) */
     .mini-util-btn button {
-        padding: 2px 8px !important;
-        font-size: 11.5px !important;
-        height: 30px !important;
-        min-height: 30px !important;
+        padding: 2px 6px !important;
+        font-size: 11px !important;
+        height: 28px !important;
+        min-height: 28px !important;
         border-radius: 4px !important;
+        font-weight: 600 !important;
     }
 
     [data-testid="stSidebar"] {
@@ -251,7 +256,7 @@ st.markdown("""
     [data-testid="stSidebar"] [data-testid="stExpander"] details summary p {
         color: #0f172a !important;
         font-weight: 700 !important;
-        font-size: 13.5px !important;
+        font-size: 13px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] {
         background-color: #f8fafc !important;
@@ -286,15 +291,15 @@ st.markdown("""
         background: #ffffff !important;
         border: 1px solid #dcdcdc !important;
         border-radius: 6px !important;
-        padding: 18px 20px !important;
-        margin-bottom: 16px !important;
+        padding: 16px 18px !important;
+        margin-bottom: 14px !important;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
     }
     .panel-title {
         color: #1976D2 !important;
         font-size: 14px !important;
         font-weight: 700 !important;
-        margin-bottom: 14px !important;
+        margin-bottom: 12px !important;
         border-bottom: 1px solid #e6e6e6 !important;
         padding-bottom: 8px !important;
     }
@@ -302,12 +307,12 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
-        font-size: 13.5px;
+        font-size: 13px;
         font-weight: 700;
         color: #111111;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         border-bottom: 1px solid #e6e6e6;
-        padding-bottom: 8px;
+        padding-bottom: 6px;
     }
 
     /* 카드와 PDF 다운로드 버튼 간격 밀착 */
@@ -369,7 +374,7 @@ st.markdown("""
     label, .stWidgetLabel p, .stWidgetLabel span {
         color: #1e293b !important;
         font-weight: 600 !important;
-        font-size: 12.5px !important;
+        font-size: 12px !important;
     }
     input, textarea {
         background-color: #ffffff !important;
@@ -437,7 +442,7 @@ if not st.session_state["auth_user"]:
         st.markdown("""
         <div style="text-align:center; margin-bottom:20px;">
             <div style="font-size:26px; font-weight:800; color:#1976D2; letter-spacing:0.5px;">COSTIFY PORTAL</div>
-            <div style="font-size:13px; color:#565656; margin-top:4px;">정밀 절삭가공 표준 원가 산출 AI 시스템</div>
+            <div style="font-size:13px; color:#565656; margin-top:4px;">정밀 절삭가공 표준 원가 산출 및 MES 워크스페이스</div>
         </div>
         """, unsafe_allow_html=True)
         
@@ -486,11 +491,10 @@ clients_db = load_tenant_data(active_cid, "clients_directory.json", [
     {"name": "대한메카트로닉스", "manager": "이영희 차장", "tel": "010-9876-5432"}
 ])
 
-# 동적 공정 단계 로드
 STAGE_CONFIG = settings.get("process_stages", DEFAULT_STAGE_CONFIG)
 PROCESS_STAGES = list(STAGE_CONFIG.keys())
 
-# 캘린더 이동 및 상세 보기 쿼리 파라미터 처리
+# 캘린더 이동 및 상세 보기 쿼리 파라미터 수신 처리
 move_id = st.query_params.get("move_id")
 to_date = st.query_params.get("to_date")
 if move_id and to_date:
@@ -513,7 +517,7 @@ if view_detail_param:
     st.rerun()
 
 # ==========================================
-# 4. 상단 TopNav & 컴팩트 유틸 버튼 (50% 축소)
+# 4. 상단 TopNav & 컴팩트 유틸 버튼
 # ==========================================
 user_last_seen = users_db.get(current_user_id, {}).get("last_seen_version", "")
 has_new_update = (user_last_seen != CURRENT_SYSTEM_VERSION)
@@ -524,14 +528,14 @@ if "selected_quote_detail_id" not in st.session_state:
     st.session_state["selected_quote_detail_id"] = None
 
 st.markdown(f"""
-<div style="background-color:#1976D2; height:48px; display:flex; align-items:center; padding:0 20px; border-radius:6px; margin-top:2px; margin-bottom:12px; color:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.12);">
+<div style="background-color:#1976D2; height:46px; display:flex; align-items:center; padding:0 20px; border-radius:6px; margin-bottom:12px; color:#ffffff; box-shadow:0 1px 3px rgba(0,0,0,0.12);">
     <div style="font-size:18px; font-weight:800; letter-spacing:0.02em; margin-right:24px; display:flex; align-items:center; gap:8px;">
         <span>⚙️</span> COSTIFY
     </div>
-    <div style="font-size:13px; font-weight:600; background:rgba(255,255,255,0.22); padding:3px 12px; border-radius:4px;">
+    <div style="font-size:12.5px; font-weight:600; background:rgba(255,255,255,0.22); padding:3px 10px; border-radius:4px;">
         🏢 {active_c_name}
     </div>
-    <div style="margin-left:auto; display:flex; align-items:center; gap:16px; font-size:13px;">
+    <div style="margin-left:auto; display:flex; align-items:center; gap:16px; font-size:12.5px;">
         <span>👤 <b>{logged_user['name']}</b></span>
     </div>
 </div>
@@ -551,7 +555,7 @@ with u_col1:
 
 with u_col2:
     if is_super_admin:
-        sw_c, rel_c, btn_c = st.columns([2.4, 0.9, 0.8])
+        sw_c, rel_c, btn_c = st.columns([2.5, 0.8, 0.7])
         with sw_c:
             c_options = list(companies_db.keys())
             c_idx = c_options.index(active_cid) if active_cid in c_options else 0
@@ -762,15 +766,15 @@ with st.sidebar:
                     st.rerun()
 
 # ==========================================
-# 6. 초고속 Gemini 3.5 Flash 도면 분석 & 100% 실도면 썸네일 생성
+# 6. 초고속 Gemini 2.5 Flash 도면 분석 & 100% 실도면 캡처 썸네일 생성
 # ==========================================
 def generate_real_drawing_thumbnail_b64(file_bytes, mime_type):
-    """업로드된 실제 도면(PDF/이미지)의 1페이지를 300x140 썸네일로 캡처하여 Base64 반환"""
+    """업로드된 실제 도면(PDF/이미지)의 1페이지를 320x160 썸네일로 캡처하여 Base64 반환"""
     try:
         if "pdf" in mime_type.lower() and HAS_PDFIUM:
             pdf = pdfium.PdfDocument(file_bytes)
             page = pdf[0]
-            bitmap = page.render(scale=1.0)
+            bitmap = page.render(scale=1.2)
             pil_img = bitmap.to_pil()
         elif HAS_PIL:
             pil_img = Image.open(io.BytesIO(file_bytes))
@@ -781,7 +785,7 @@ def generate_real_drawing_thumbnail_b64(file_bytes, mime_type):
 
         pil_img.thumbnail((320, 160))
         buf = io.BytesIO()
-        pil_img.save(buf, format="JPEG", quality=80)
+        pil_img.save(buf, format="JPEG", quality=85)
         return base64.b64encode(buf.getvalue()).decode("utf-8")
     except Exception:
         return ""
@@ -816,7 +820,7 @@ def analyze_drawing_gemini(api_key, file_bytes, mime_type, filename, engineer_pr
     for attempt in range(2):
         try:
             response = client.models.generate_content(
-                model="gemini-3.5-flash",
+                model="gemini-3.8-flash",
                 contents=[doc_part, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
@@ -1024,7 +1028,7 @@ def render_veteran_detail_view(quote_id):
 
     top_c1, top_c2 = st.columns([1.5, 4.5])
     with top_c1:
-        if st.button("← 견적 목록으로 복귀", use_container_width=True):
+        if st.button("← 견적 대시보드로 복귀", use_container_width=True):
             st.session_state["selected_quote_detail_id"] = None
             st.rerun()
     with top_c2:
@@ -1042,17 +1046,17 @@ def render_veteran_detail_view(quote_id):
     with det_l:
         st.markdown('<div class="panel-card"><div class="panel-title">1. 공장장 현장 가공 지시서 (Shop Traveler)</div>', unsafe_allow_html=True)
         
-        # 실제 도면 썸네일 노출
+        # 100% 실제 도면 캡처 이미지 표시
         if order.get("thumbnail_b64"):
             st.markdown(f"""
-            <div style="width:100%; height:200px; background:#ffffff; border:1px solid #cbd5e1; border-radius:4px; margin-bottom:14px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+            <div style="width:100%; height:240px; background:#ffffff; border:1px solid #cbd5e1; border-radius:4px; margin-bottom:14px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
                 <img src="data:image/jpeg;base64,{order['thumbnail_b64']}" style="max-width:100%; max-height:100%; object-fit:contain;"/>
             </div>
             """, unsafe_allow_html=True)
         else:
             st.markdown(f"""
             <div style="background:#f1f5f9; padding:20px; border-radius:4px; text-align:center; color:#64748b; font-size:13px; margin-bottom:14px;">
-                📄 등록된 도면 원본 식별자: <b>{order.get('filename')}</b>
+                📄 등록된 도면 식별자: <b>{order.get('filename')}</b>
             </div>
             """, unsafe_allow_html=True)
 
@@ -1068,15 +1072,14 @@ def render_veteran_detail_view(quote_id):
             st.metric("난이도 계수", f"x {order.get('difficulty_factor', 1.0)}")
 
         st.markdown("##### 현장 가공 특이사항 및 AI 분석 근거")
-        st.info(order.get("memo") or "현장 특이사항 없음 (표준 MCT 3축 공정 준수)")
+        st.info(order.get("memo") or "현장 특이사항 없음 (표준 공정 준수)")
 
-        # 엔지니어 메모 직접 수정
-        new_field_memo = st.text_input("현장 메모 즉시 보정", value=order.get("memo", ""))
-        if st.button("현장 메모 저장", use_container_width=True):
+        new_field_memo = st.text_input("현장 지시 메모 수정", value=order.get("memo", ""))
+        if st.button("현장 지시 메모 즉시 저장", use_container_width=True):
             order["memo"] = new_field_memo
             save_tenant_data(active_cid, "orders_database.json", orders_db)
             log_audit(active_cid, logged_user["name"], "현장 지시 메모 수정", f"[{order.get('quote_no')}] {order.get('filename')}", new_field_memo)
-            st.success("메모가 수정되었습니다.")
+            st.success("메모가 저장되었습니다.")
             st.rerun()
 
         st.markdown('</div>', unsafe_allow_html=True)
@@ -1126,7 +1129,7 @@ def render_veteran_detail_view(quote_id):
         st.markdown('</div>', unsafe_allow_html=True)
 
 # ==========================================
-# 9. 메인 워크스페이스 분기 (상세화면 or 탭 네비게이션)
+# 9. 메인 워크스페이스 분기
 # ==========================================
 if st.session_state["selected_quote_detail_id"] is not None:
     render_veteran_detail_view(st.session_state["selected_quote_detail_id"])
@@ -1134,13 +1137,16 @@ else:
     tabs = st.tabs(["견적 대시보드 (목록)", "신규 견적 산출", "공정흐름 관리 (MES)", "납기 캘린더", "시스템 설정"])
 
     # ------------------------------------------
-    # TAB 1: 견적 대시보드 (목록 & 100% 실도면 썸네일)
+    # TAB 1: 견적 대시보드 (컴팩트 필터 레일 & 25건 페이징)
     # ------------------------------------------
     with tabs[0]:
         if "filter_urgent_only" not in st.session_state:
             st.session_state["filter_urgent_only"] = False
+        if "current_page_idx" not in st.session_state:
+            st.session_state["current_page_idx"] = 1
 
-        rail_col, main_col = st.columns([1, 3.2], gap="large")
+        # 필터 레일 폭을 절반(0.65 : 3.35)으로 대폭 축소
+        rail_col, main_col = st.columns([0.65, 3.35], gap="medium")
 
         with rail_col:
             st.markdown("""
@@ -1157,10 +1163,11 @@ else:
                 st.session_state["f_stage"] = "전체"
                 st.session_state["f_sort"] = "최신 등록순"
                 st.session_state["filter_urgent_only"] = False
+                st.session_state["current_page_idx"] = 1
                 st.rerun()
 
             all_clients = ["전체"] + sorted(list({o.get("client_name") for o in orders_db if o.get("client_name")}))
-            f_client = st.selectbox("고객사(발주처)", all_clients, key="f_client")
+            f_client = st.selectbox("고객사", all_clients, key="f_client")
 
             all_materials = ["전체"] + list(settings["materials"].keys())
             f_material = st.selectbox("소재 재질", all_materials, key="f_material")
@@ -1169,11 +1176,11 @@ else:
             f_machine = st.selectbox("가공 설비", all_machines, key="f_machine")
 
             all_stages = ["전체"] + PROCESS_STAGES
-            f_stage = st.selectbox("공정 진행 상태", all_stages, key="f_stage")
+            f_stage = st.selectbox("공정 상태", all_stages, key="f_stage")
 
             f_sort = st.selectbox(
                 "정렬 기준",
-                ["최신 등록순", "과거 등록순", "견적금액 높은순", "납기 임박순"],
+                ["최신순", "과거순", "금액높은순", "납기순"],
                 key="f_sort"
             )
 
@@ -1208,18 +1215,31 @@ else:
                     if o.get("status") != "7. 출하완료" and o.get("due_date") and (datetime.strptime(o.get("due_date"), "%Y-%m-%d").date() - today_date).days <= 3
                 ]
 
-            if f_sort == "최신 등록순":
+            if f_sort == "최신순":
                 filtered_orders.sort(key=lambda x: str(x.get("id", "")), reverse=True)
-            elif f_sort == "과거 등록순":
+            elif f_sort == "과거순":
                 filtered_orders.sort(key=lambda x: str(x.get("id", "")))
-            elif f_sort == "견적금액 높은순":
+            elif f_sort == "금액높은순":
                 filtered_orders.sort(key=lambda x: x.get("total_price", 0), reverse=True)
-            elif f_sort == "납기 임박순":
+            elif f_sort == "납기순":
                 filtered_orders.sort(key=lambda x: str(x.get("due_date", "9999-99-99")))
+
+            # 25건 페이징(Pagination) 연산
+            PAGE_SIZE = 25
+            total_items = len(filtered_orders)
+            total_pages = max(1, math.ceil(total_items / PAGE_SIZE))
+            
+            if st.session_state["current_page_idx"] > total_pages:
+                st.session_state["current_page_idx"] = total_pages
+            current_page = st.session_state["current_page_idx"]
+
+            start_idx = (current_page - 1) * PAGE_SIZE
+            end_idx = min(start_idx + PAGE_SIZE, total_items)
+            paged_orders = filtered_orders[start_idx:end_idx]
 
             h_left, h_right = st.columns([3, 1.5])
             with h_left:
-                st.markdown(f"#### 견적 관리 <span style='font-size:14px; font-weight:400; color:#565656;'>(전체 {len(filtered_orders)}건)</span>", unsafe_allow_html=True)
+                st.markdown(f"#### 견적 관리 <span style='font-size:13.5px; font-weight:400; color:#565656;'>(전체 {total_items}건 중 {start_idx+1 if total_items>0 else 0}~{end_idx}건 | {current_page}/{total_pages} 페이지)</span>", unsafe_allow_html=True)
             with h_right:
                 view_mode = st.radio("보기 모드", ["카드형 (미리보기)", "목록형 (테이블)"], horizontal=True, label_visibility="collapsed", key="v_toggle")
 
@@ -1252,20 +1272,22 @@ else:
                 if urgent_late_count > 0 and not st.session_state["filter_urgent_only"]:
                     if st.button(f"🚨 위험/지연 {urgent_late_count}건 바로 모아보기", use_container_width=True):
                         st.session_state["filter_urgent_only"] = True
+                        st.session_state["current_page_idx"] = 1
                         st.rerun()
 
             if st.session_state["filter_urgent_only"]:
                 st.info("🚨 현재 **납기 지연 및 임박(D-3) 건만 집중 필터링**되어 표시 중입니다.")
                 if st.button("✕ 집중 모드 해제 (전체 견적 보기)"):
                     st.session_state["filter_urgent_only"] = False
+                    st.session_state["current_page_idx"] = 1
                     st.rerun()
 
-            if not filtered_orders:
+            if not paged_orders:
                 st.info("검색 및 필터 조건에 일치하는 등록 견적이 없습니다.")
             else:
                 if view_mode == "카드형 (미리보기)":
                     card_cols = st.columns(2)
-                    for idx, o in enumerate(filtered_orders):
+                    for idx, o in enumerate(paged_orders):
                         c_target = card_cols[idx % 2]
                         st_name = o.get("status", "1. 견적제출")
                         conf = STAGE_CONFIG.get(st_name, {"bg": "#E9F4FF", "color": "#1667B8", "name": st_name})
@@ -1277,8 +1299,9 @@ else:
                             else:
                                 thumb_html = '<div style="width:100%; height:90px; background:#f0f7ff; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; justify-content:center; color:#1976D2; font-size:12px; font-weight:700;">📐 CAD 도면 원본 연결됨</div>'
 
-                            st.markdown('<div class="quote-card-container">', unsafe_allow_html=True)
+                            # 마크다운 들여쓰기 변환 방지 (단일 문자열 처리)
                             card_html = (
+                                f'<div class="quote-card-container">'
                                 f'<div class="quote-card">'
                                 f'{thumb_html}'
                                 f'<div class="quote-card-body">'
@@ -1296,7 +1319,7 @@ else:
                             )
                             st.markdown(card_html, unsafe_allow_html=True)
                             
-                            # 카드에 딱 붙는 푸터 액션 바 (상세 검수 + PDF 다운로드)
+                            # 카드에 딱 밀착된 푸터 액션 바 (상세 검수 + PDF 다운로드)
                             st.markdown('<div class="quote-card-btn-wrap">', unsafe_allow_html=True)
                             b_c1, b_c2 = st.columns(2)
                             with b_c1:
@@ -1319,7 +1342,7 @@ else:
                             st.markdown('</div></div>', unsafe_allow_html=True)
                 else:
                     table_rows = []
-                    for o in filtered_orders:
+                    for o in paged_orders:
                         table_rows.append({
                             "견적번호": o.get("quote_no"),
                             "품명/도면": o.get("filename"),
@@ -1334,8 +1357,23 @@ else:
                         })
                     st.dataframe(pd.DataFrame(table_rows), hide_index=True, use_container_width=True)
 
+                # 하단 25건 단위 페이징 컨트롤러
+                if total_pages > 1:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    p_c1, p_c2, p_c3 = st.columns([1, 2, 1])
+                    with p_c1:
+                        if st.button("◀ 이전 페이지", disabled=(current_page == 1), use_container_width=True):
+                            st.session_state["current_page_idx"] = max(1, current_page - 1)
+                            st.rerun()
+                    with p_c2:
+                        st.markdown(f"<div style='text-align:center; padding-top:6px; font-weight:700; color:#1976D2;'>{current_page} / {total_pages} 페이지</div>", unsafe_allow_html=True)
+                    with p_c3:
+                        if st.button("다음 페이지 ▶", disabled=(current_page == total_pages), use_container_width=True):
+                            st.session_state["current_page_idx"] = min(total_pages, current_page + 1)
+                            st.rerun()
+
     # ------------------------------------------
-    # TAB 2: 신규 견적 산출 (Google Gemini 3.5 Flash 엔진)
+    # TAB 2: 신규 견적 산출 (Google Gemini 2.5 Flash 엔진)
     # ------------------------------------------
     with tabs[1]:
         if "client_name_val" not in st.session_state: st.session_state["client_name_val"] = "(주)한국정밀"
@@ -1386,7 +1424,7 @@ else:
                             file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                             open_in_new_tab_button(uploaded_file.getvalue(), file_mime, label="도면 새 창 열기")
                     with col_b2:
-                        start_ai = st.button("⚡ AI 분석 실행", type="primary", use_container_width=True)
+                        start_ai = st.button("⚡ AI 분석 실행 (Gemini Flash)", type="primary", use_container_width=True)
 
                     if start_ai:
                         if not uploaded_file:
@@ -1397,11 +1435,11 @@ else:
                             clean_name = os.path.splitext(uploaded_file.name)[0]
                             st.session_state["custom_part_name"] = clean_name
                             
-                            with st.spinner("⚡ 도면 정밀 분석 중... (약 10초)"):
+                            with st.spinner("⚡ Gemini 2.5 Flash 도면 정밀 분석 중... (약 2초)"):
                                 file_mime = "application/pdf" if uploaded_file.name.lower().endswith(".pdf") else "image/jpeg"
                                 file_bytes = uploaded_file.getvalue()
                                 
-                                # 실제 도면 1페이지 썸네일 캡처
+                                # 실제 업로드된 도면 1페이지 썸네일 캡처
                                 thumb_b64 = generate_real_drawing_thumbnail_b64(file_bytes, file_mime)
                                 st.session_state["last_uploaded_thumb"] = thumb_b64
 
@@ -1545,12 +1583,13 @@ else:
                 "unit_price": final_unit_price,
                 "memo": order_memo
             }
+            
             pdf_bytes = create_formal_pdf(quote_payload, settings["company_info"])
 
             with st.container():
-                st.markdown('<div class="panel-card"><div class="panel-title">견적 산출</div>', unsafe_allow_html=True)
+                st.markdown('<div class="panel-card"><div class="panel-title">견적 산출 브레이크다운</div>', unsafe_allow_html=True)
                 
-                # AI 분석 완료 시 초록색 하이라이트 배너 노출
+                # AI 분석 완료 시 시각적 확인 배너
                 if st.session_state.get("ai_analysis_done", False):
                     st.markdown("""
                     <div style="background:#E8F5E9; border:1px solid #38A169; border-radius:4px; padding:10px 14px; margin-bottom:12px; font-size:12.5px; color:#236542; display:flex; align-items:center; gap:8px;">
@@ -1628,7 +1667,6 @@ else:
     # TAB 3: 공정흐름 관리 (MES 파이프라인 & 단계 편집기)
     # ------------------------------------------
     with tabs[2]:
-        # 공정 단계 편집 팝오버 탑재
         st.markdown('<div class="panel-card"><div class="panel-title" style="display:flex; justify-content:space-between; align-items:center;"><span>공정 진행 상태별 필터</span>', unsafe_allow_html=True)
         with st.popover("⚙️ 공정 단계 항목 편집 (추가/삭제/이름 변경)"):
             st.markdown("##### 등록된 공정 단계 편집")
@@ -1695,7 +1733,6 @@ else:
                 stage_name = o.get("status", "1. 견적제출")
                 header_title = f"[{stage_name}] {o.get('quote_no')} | {o.get('client_name')} : {o.get('filename')} ({o.get('qty')} EA) | 납기: {o.get('due_date')}"
                 
-                # 사용자가 누를 때만 펼쳐지도록 expanded=False 고정
                 with st.expander(header_title, expanded=False):
                     step_idx = PROCESS_STAGES.index(stage_name) if stage_name in PROCESS_STAGES else 0
                     
@@ -1727,7 +1764,7 @@ else:
                                         old_st = orders_db[real_idx]["status"]
                                         orders_db[real_idx]["status"] = new_status
                                         orders_db[real_idx]["memo"] = new_memo
-                                        log_audit(active_cid, logged_user["name"], "공정 변경", f"[{o.get('quote_no')}] {o.get('filename')}", f"{old_st} ➔ {new_status}")
+                                        log_audit(active_cid, logged_user["name"], "MES 공정 변경", f"[{o.get('quote_no')}] {o.get('filename')}", f"{old_st} ➔ {new_status}")
                                         break
                                 save_tenant_data(active_cid, "orders_database.json", orders_db)
                                 st.success("저장 완료")
@@ -1745,7 +1782,6 @@ else:
         today = datetime.today().date()
 
         if cal_mode == "월간 달력 그리드":
-            # 신속 일정 변경 바
             with st.container():
                 st.markdown('<div class="panel-card" style="padding:12px 16px; margin-bottom:12px;"><div class="panel-title" style="margin-bottom:8px; border-bottom:none;">⚡ 납기 일정 신속 변경 바 (클릭 이동 또는 아래 캘린더에서 드래그앤드롭 / 안건 클릭 시 상세 검수 화면 진입)</div>', unsafe_allow_html=True)
                 sc1, sc2, sc3 = st.columns([2.5, 1.5, 1])
@@ -1841,13 +1877,12 @@ else:
                 let draggedId = null;
 
                 function openDetail(orderId) {{
-                    try {{
-                        const parentUrl = new URL(window.top.location.href);
-                        parentUrl.searchParams.set("view_detail", orderId);
-                        window.top.location.href = parentUrl.toString();
-                    }} catch(e) {{
-                        console.log("Detail nav error");
-                    }}
+                    const targetUrl = './?view_detail=' + encodeURIComponent(orderId);
+                    const a = document.createElement('a');
+                    a.href = targetUrl;
+                    a.target = '_top';
+                    document.body.appendChild(a);
+                    a.click();
                 }}
 
                 document.querySelectorAll('.drag-item').forEach(el => {{
@@ -1871,14 +1906,12 @@ else:
                         cell.classList.remove('dragover');
                         const targetDate = cell.getAttribute('data-date');
                         if (draggedId && targetDate) {{
-                            try {{
-                                const parentUrl = new URL(window.top.location.href);
-                                parentUrl.searchParams.set("move_id", draggedId);
-                                parentUrl.searchParams.set("to_date", targetDate);
-                                window.top.location.href = parentUrl.toString();
-                            }} catch(err) {{
-                                console.log("Drag drop dispatch error");
-                            }}
+                            const targetUrl = './?move_id=' + encodeURIComponent(draggedId) + '&to_date=' + encodeURIComponent(targetDate);
+                            const a = document.createElement('a');
+                            a.href = targetUrl;
+                            a.target = '_top';
+                            document.body.appendChild(a);
+                            a.click();
                         }}
                     }});
                 }});
